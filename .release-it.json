@@ -1,0 +1,20 @@
+{
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "angular",
+      "infile": "CHANGELOG.md"
+    }
+  },
+  "npm": {
+    "publish": false
+  },
+  "github": {
+    "release": false
+  },
+  "git": {
+    "commitMessage": "release v${version}"
+  },
+  "hooks": {
+    "after:bump": "npx n8n-node lint --fix && npx n8n-node build"
+  }
+}
