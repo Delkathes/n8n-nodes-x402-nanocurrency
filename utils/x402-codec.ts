@@ -35,11 +35,16 @@ export interface ResourceInfo {
 	tags?: string[];
 }
 
-/** Raw accept as it appears on the wire (v1). */
+/** Raw accept as it appears on the wire (v1).
+ * The classic shape uses `maxAmountRequired`; the current NanoGPT API nests
+ * accepts under `body.payment.accepted` and uses `amount` + `protocolScheme`
+ * (`scheme: "nano-exact"` means the exact scheme).
+ */
 export interface AcceptV1 {
 	scheme: string;
 	network: string;
-	maxAmountRequired: string;
+	maxAmountRequired?: string;
+	amount?: string;
 	payTo: string;
 	asset?: string;
 	resource?: string;
@@ -48,6 +53,14 @@ export interface AcceptV1 {
 	outputSchema?: unknown;
 	maxTimeoutSeconds?: number;
 	extra?: Record<string, unknown>;
+	protocolScheme?: string;
+	paymentId?: string;
+	expiresAt?: string;
+	statusUrl?: string;
+	completeUrl?: string;
+	amountUsd?: string;
+	amountFormatted?: string;
+	requestHash?: string;
 }
 
 /** Raw accept as it appears on the wire (v2). */
@@ -170,20 +183,35 @@ function getHeader(headers: Record<string, unknown> | undefined, name: string): 
 
 /** Normalize a raw v1 accept into the version-agnostic shape. */
 export function normalizeAcceptV1(accept: AcceptV1): NormalizedAccept {
-	const extra = isRecord(accept.extra) ? accept.extra : {};
+	const extra: Record<string, unknown> = isRecord(accept.extra) ? { ...accept.extra } : {};
+	for (const key of ['expiresAt', 'statusUrl', 'completeUrl', 'amountUsd', 'amountFormatted', 'requestHash'] as const) {
+		if (typeof accept[key] === 'string') {
+			extra[key] = accept[key];
+		}
+	}
+
+	const scheme = accept.protocolScheme ?? (accept.scheme === 'nano-exact' ? 'exact' : accept.scheme);
+	const amountRaw = accept.maxAmountRequired ?? accept.amount ?? '0';
+	const paymentId =
+		typeof accept.paymentId === 'string'
+			? accept.paymentId
+			: typeof extra.paymentId === 'string'
+				? extra.paymentId
+				: undefined;
+
 	return {
-		scheme: accept.scheme,
+		scheme,
 		network: accept.network,
-		amountRaw: accept.maxAmountRequired,
+		amountRaw,
 		payTo: accept.payTo,
-		asset: accept.asset,
+		asset: accept.asset ?? 'XNO',
 		resource: accept.resource,
 		description: accept.description,
 		mimeType: accept.mimeType,
 		outputSchema: accept.outputSchema,
 		maxTimeoutSeconds: accept.maxTimeoutSeconds,
 		extra,
-		...(typeof extra.paymentId === 'string' ? { paymentId: extra.paymentId } : {}),
+		...(paymentId ? { paymentId } : {}),
 	};
 }
 
@@ -238,6 +266,10 @@ export function detectVersion(
 		if (Array.isArray(accepts) && accepts.length > 0) {
 			return body.x402Version === 2 ? 2 : 1;
 		}
+		const payment = body.payment;
+		if (isRecord(payment) && Array.isArray(payment.accepted) && payment.accepted.length > 0) {
+			return payment.version === 2 ? 2 : 1;
+		}
 	}
 
 	return null;
@@ -276,6 +308,29 @@ export function parsePaymentRequired(
 				.map((accept) => normalizeAccept(accept, version))
 				.filter((accept): accept is NormalizedAccept => accept !== null),
 		};
+	}
+
+	// Current NanoGPT v1 shape: requirements nested under body.payment.accepted.
+	if (isRecord(body) && isRecord(body.payment)) {
+		const payment = body.payment;
+		const accepted = payment.accepted;
+		if (Array.isArray(accepted) && accepted.length > 0) {
+			const version: X402Version = payment.version === 2 ? 2 : 1;
+			const parentPaymentId = typeof payment.paymentId === 'string' ? payment.paymentId : undefined;
+			return {
+				version,
+				error: isRecord(body.error) ? body.error : undefined,
+				accepts: (accepted as unknown[])
+					.map((accept) => {
+						const normalized = normalizeAccept(accept, version);
+						if (normalized && parentPaymentId && !normalized.paymentId) {
+							normalized.paymentId = parentPaymentId;
+						}
+						return normalized;
+					})
+					.filter((accept): accept is NormalizedAccept => accept !== null),
+			};
+		}
 	}
 
 	return null;

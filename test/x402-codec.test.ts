@@ -161,6 +161,71 @@ describe('payment payloads', () => {
 	});
 });
 
+describe('current NanoGPT v1 shape (nested payment.accepted)', () => {
+	// Captured from a live probe of api.nano-gpt.com/v1/chat/completions
+	// with the "x-x402: true" header (September 2026).
+	const body = {
+		error: {
+			message: 'Insufficient balance. Payment required.',
+			type: 'insufficient_quota',
+			code: 'insufficient_quota',
+		},
+		payment: {
+			version: 1,
+			paymentId: 'pay_322ca44d0ffb9a83559798327960bb72',
+			requestHash: 'sha256:cf659d7cfa048c8e0e32f4a3b8a84fb1e5fdfcd544066a933c121912ed76bc61',
+			expiresAt: '2026-09-01T22:16:03.000Z',
+			amountUsd: '0.00720984',
+			statusUrl: 'https://beta.nano-gpt.com/api/x402/status/pay_322ca44d0ffb9a83559798327960bb72',
+			completeUrl: 'https://beta.nano-gpt.com/api/x402/complete/pay_322ca44d0ffb9a83559798327960bb72',
+			accepted: [
+				{
+					scheme: 'nano',
+					protocolScheme: 'nano',
+					network: 'nano-mainnet',
+					amount: '18660030000000000000000000000',
+					payTo: 'nano_17tuue5q97cunzj3pkjd9to661kzds9h7p35smfxcqfx7uaa4jgsqdcf7m8f',
+					paymentId: 'pay_322ca44d0ffb9a83559798327960bb72',
+				},
+				{
+					scheme: 'nano-exact',
+					protocolScheme: 'exact',
+					network: 'nano:mainnet',
+					amount: '18660030000000000000000000000',
+					amountFormatted: '0.01866003 XNO',
+					payTo: 'nano_17tuue5q97cunzj3pkjd9to661kzds9h7p35smfxcqfx7uaa4jgsqdcf7m8f',
+					paymentId: 'pay_322ca44d0ffb9a83559798327960bb72',
+				},
+			],
+		},
+	};
+
+	it('detects v1 from the nested payment.accepted body', () => {
+		expect(detectVersion({}, body)).toBe(1);
+	});
+
+	it('parses the nested requirements and picks the exact nano option', () => {
+		const requirements = parsePaymentRequired({}, body);
+		expect(requirements).not.toBeNull();
+		expect(requirements!.version).toBe(1);
+		expect(requirements!.accepts).toHaveLength(2);
+
+		const accept = findExactNanoAccept(requirements!.accepts);
+		expect(accept).toBeDefined();
+		expect(accept!.scheme).toBe('exact');
+		expect(accept!.network).toBe('nano:mainnet');
+		expect(accept!.amountRaw).toBe('18660030000000000000000000000');
+		expect(accept!.paymentId).toBe('pay_322ca44d0ffb9a83559798327960bb72');
+	});
+
+	it('does not pick the non-exact nano-mainnet option', () => {
+		const requirements = parsePaymentRequired({}, body)!;
+		const nonExact = requirements.accepts.find((accept) => accept.scheme === 'nano');
+		expect(nonExact).toBeDefined();
+		expect(findExactNanoAccept([nonExact!])).toBeUndefined();
+	});
+});
+
 describe('settlement', () => {
 	it('parses v1 and v2 settlement headers', () => {
 		const settlement = {

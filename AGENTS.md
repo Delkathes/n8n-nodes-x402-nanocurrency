@@ -67,9 +67,10 @@ test/                   # vitest tests
 
 ## Protocol quick reference
 
-- v1 402 body: `{x402Version: 1, accepts: [{scheme, network, maxAmountRequired, payTo, asset, resource, description, mimeType, maxTimeoutSeconds, extra}]}`
+- v1 402 body (classic): `{x402Version: 1, accepts: [{scheme, network, maxAmountRequired, payTo, asset, resource, description, mimeType, maxTimeoutSeconds, extra}]}`
+- v1 402 body (current NanoGPT, requires `x-x402: true` header): `{error, payment: {version: 1, paymentId, expiresAt, statusUrl, completeUrl, accepted: [{scheme, protocolScheme, network, amount, payTo, paymentId, ...}]}}` — the exact scheme is `protocolScheme: "exact"` (`scheme: "nano-exact"`) with `network: "nano:mainnet"`; the parser handles both shapes.
 - v2 402 header `PAYMENT-REQUIRED`: base64 JSON `{x402Version: 2, resource: {...}, accepts: [{scheme, network, amount, payTo, asset, maxTimeoutSeconds, extra}]}`
-- v1 payment header `X-PAYMENT`: base64 `{x402Version: 1, scheme, network, payload: {block}}`
+- v1 payment header `X-PAYMENT`: base64 `{x402Version: 1, scheme, network, payload: {paymentId?, block}}`
 - v2 payment header `PAYMENT-SIGNATURE`: base64 `{x402Version: 2, scheme, network, accepted, payload: {block}}`
 - Settlement: `X-PAYMENT-RESPONSE` (v1) / `PAYMENT-RESPONSE` (v2): `{success, transaction, network, payer}`
 - Facilitator: `/supported` (GET), `/verify` (POST), `/settle` (POST) with `{paymentPayload, paymentRequirements}`

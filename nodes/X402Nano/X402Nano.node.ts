@@ -177,7 +177,7 @@ export class X402Nano implements INodeType {
 			},
 			{
 				displayName: 'URL',
-				name: 'upstreamUrl',
+				name: 'url',
 				type: 'string',
 				required: true,
 				displayOptions: {
@@ -439,7 +439,7 @@ export class X402Nano implements INodeType {
 			},
 			{
 				displayName: 'Pay To Address',
-				name: 'signaturePayTo',
+				name: 'payTo',
 				type: 'string',
 				required: true,
 				displayOptions: {
@@ -470,7 +470,7 @@ export class X402Nano implements INodeType {
 			},
 			{
 				displayName: 'Amount',
-				name: 'signatureAmount',
+				name: 'amount',
 				type: 'string',
 				required: true,
 				displayOptions: {
