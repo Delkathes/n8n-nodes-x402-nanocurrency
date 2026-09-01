@@ -1,22 +1,22 @@
 # n8n-nodes-x402nano
 
-An n8n community node package for the **x402 payment protocol** with **Nano (XNO)** — the HTTP 402 paywall for AI APIs and other web resources.
+An n8n community node package for the **x402 payment protocol** with **Nano (XNO)** — the HTTP 402 paywall for AI APIs and other web resources. Supports both protocol versions (v1 and v2) and works with or without a facilitator.
 
-> **Status: scaffold.** Node skeletons, credentials and CI/CD are in place. The client operations and paywall trigger are being implemented.
-
-## What it will do
+## Nodes
 
 ### `X402 Nano` node (client — payer)
 
-| Operation | Description |
-| --- | --- |
-| Pay | Wrap any HTTP request: probe, pay the 402 with Nano, retry, return the paid response + settlement metadata |
-| Probe | Send a request without paying and get the payment requirements (price, payTo, resource) |
-| Build Payment Signature | Create an `X-PAYMENT` (v1) or `PAYMENT-SIGNATURE` (v2) header from payTo + amount |
-| Verify Payment | Check a payment payload against an x402 facilitator |
-| Settle Payment | Process a verified payment block and get the transaction hash |
-| Supported | List the facilitator's supported payment kinds |
-| Probe Upstream Price | Call a paywalled upstream URL, parse its v1/v2 requirements, apply a markup percentage |
+| Resource | Operation | Description |
+| --- | --- | --- |
+| Request | Pay | Wrap any HTTP request: probe, pay the 402 with Nano, retry, return the paid response + settlement metadata |
+| Request | Probe | Send a request without paying and get the payment requirements (price, payTo, resource) |
+| Payment | Build Payment Signature | Create an `X-PAYMENT` (v1) or `PAYMENT-SIGNATURE` (v2) header from a payTo address + amount |
+| Payment | Verify Payment | Verify a payment payload against the expected requirements (facilitator or local Nano RPC) |
+| Payment | Settle Payment | Settle a verified payment block and get the transaction hash (facilitator or local Nano RPC) |
+| Payment | Get Supported | List the facilitator's supported payment kinds |
+| Payment | Probe Upstream Price | Call a paywalled upstream URL, parse its v1/v2 requirements, apply a markup percentage |
+| Response | Build 402 Payment Required | Build the 402 headers + body for a paywall webhook (v1, v2 or both) |
+| Response | Build Payment Response | Build the settlement response headers for a paid request |
 
 ### `X402 Nano Trigger` node (resource server — seller)
 
@@ -24,10 +24,10 @@ A webhook that turns any n8n workflow into a paid endpoint:
 
 ```
 X402 Nano Trigger (request with or without payment)
-├─ no payment header  → Respond 402 + PAYMENT-REQUIRED (probe)
-└─ paid request       → verify + settle (facilitator or local Nano RPC)
+├─ no payment header  → Build 402 Payment Required → Respond 402 + PAYMENT-REQUIRED
+└─ paid request       → Verify Payment + Settle Payment (facilitator or local RPC)
                         → your business nodes (NanoGPT, ...)
-                        → Respond 200 + PAYMENT-RESPONSE + result
+                        → Build Payment Response → Respond 200 + PAYMENT-RESPONSE
 ```
 
 ## Protocol versions

@@ -45,11 +45,11 @@ export class X402NanoTrigger implements INodeType {
 		],
 		properties: [
 			{
-				displayName: 'Placeholder',
-				name: 'placeholderNotice',
+				displayName: 'Paywall Flow',
+				name: 'paywallNotice',
 				type: 'notice',
 				default:
-					'Payment verification and 402 responses are being implemented. End the workflow with a Respond to Webhook node.',
+					'Every request (body, query and headers) is passed to the workflow. End the workflow with a Respond to Webhook node: for requests without a PAYMENT-SIGNATURE/X-PAYMENT header respond 402 using "Build 402 Payment Required", otherwise verify + settle the payment and respond 200 using "Build Payment Response".',
 			},
 		],
 	};
@@ -71,9 +71,9 @@ export class X402NanoTrigger implements INodeType {
 	};
 
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
-		// The raw request (headers + body) is passed to the workflow. Respond
-		// with a "Respond to Webhook" node (402 + PAYMENT-REQUIRED, or
-		// 200 + PAYMENT-RESPONSE).
+		// The default webhook item ({ headers, params, query, body }) is passed
+		// to the workflow. The workflow responds via a Respond to Webhook node
+		// (402 + PAYMENT-REQUIRED, or 200 + PAYMENT-RESPONSE).
 		return { webhookResponse: 'default' };
 	}
 }
