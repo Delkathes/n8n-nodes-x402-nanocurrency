@@ -149,10 +149,10 @@ export function buildSendBlock(
 	const block: NanoStateBlock = {
 		type: 'state',
 		account: params.account,
-		previous: params.previous,
+		previous: params.previous.toUpperCase(),
 		representative: params.representative,
 		balance: (balance - amount).toString(),
-		link: toKey.toString('hex'),
+		link: toKey.toString('hex').toUpperCase(),
 		link_as_account: params.toAddress,
 		work: '',
 		signature: '',

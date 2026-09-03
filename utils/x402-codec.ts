@@ -101,6 +101,11 @@ export interface NormalizedAccept {
 	maxTimeoutSeconds?: number;
 	extra?: Record<string, unknown>;
 	paymentId?: string;
+	/** The accept exactly as it appeared on the wire, echoed back verbatim in
+	 * the payment payload. x402 core resource servers deep-equal the echoed
+	 * `accepted` against the advertised requirements, so every advertised
+	 * field (e.g. maxTimeoutSeconds) must survive. */
+	rawAccept?: Record<string, unknown>;
 }
 
 export interface NormalizedPaymentRequired {
@@ -212,6 +217,7 @@ export function normalizeAcceptV1(accept: AcceptV1): NormalizedAccept {
 		maxTimeoutSeconds: accept.maxTimeoutSeconds,
 		extra,
 		...(paymentId ? { paymentId } : {}),
+		rawAccept: { ...accept },
 	};
 }
 
@@ -227,6 +233,7 @@ export function normalizeAcceptV2(accept: AcceptV2): NormalizedAccept {
 		maxTimeoutSeconds: accept.maxTimeoutSeconds,
 		extra,
 		...(typeof extra.paymentId === 'string' ? { paymentId: extra.paymentId } : {}),
+		rawAccept: { ...accept },
 	};
 }
 

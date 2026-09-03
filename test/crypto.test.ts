@@ -128,6 +128,24 @@ describe('send blocks', () => {
 		expect(verifyBlock(signed, built!.hash)).toBe(true);
 	});
 
+	it('emits uppercase hex for previous and link (nano-sdk verifyBlock compares link case-sensitively)', () => {
+		const payerPublicKey = derivePublicKey(TEST_PRIVATE_KEY);
+		const payer = encodeNanoAddress(payerPublicKey) as string;
+
+		const built = buildSendBlock({
+			account: payer,
+			previous: 'a'.repeat(64),
+			representative: payer,
+			balanceRaw: '1000000000000000000000000000000',
+			toAddress: BURN_ACCOUNT,
+			amountRaw: '100000000000000000000000000000',
+		});
+		expect(built).not.toBeNull();
+		expect(built!.block.previous).toBe('A'.repeat(64));
+		expect(built!.block.link).toBe(built!.block.link.toUpperCase());
+		expect(/^[0-9A-F]+$/.test(built!.block.link)).toBe(true);
+	});
+
 	it('rejects a block signed by the wrong key', () => {
 		const payerPublicKey = derivePublicKey(TEST_PRIVATE_KEY);
 		const payer = encodeNanoAddress(payerPublicKey) as string;

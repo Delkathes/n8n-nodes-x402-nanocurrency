@@ -121,6 +121,49 @@ describe('v2 requirements (header)', () => {
 		expect(decoded.x402Version).toBe(2);
 		expect(decoded.accepts[0].amount).toBe(AMOUNT_RAW);
 	});
+
+	it('keeps the raw wire accept for the payment echo, including maxTimeoutSeconds', () => {
+		const acceptWithTimeout = {
+			scheme: 'exact',
+			network: 'nano:mainnet',
+			amount: AMOUNT_RAW,
+			asset: 'XNO',
+			payTo: BURN_ACCOUNT,
+			maxTimeoutSeconds: 300,
+			extra: {},
+		};
+		const normalized = normalizeAcceptV2(acceptWithTimeout);
+		expect(normalized.maxTimeoutSeconds).toBe(300);
+		expect(normalized.rawAccept).toEqual(acceptWithTimeout);
+	});
+
+	it('echoed rawAccept satisfies the x402 core strict requirement matching', () => {
+		// Advertised accept captured from the x402nano.org demo endpoint.
+		// @x402/core's paymentRequirementsMatchAccepted deep-equals the
+		// advertised accept (minus extra) against the echoed accepted.
+		const advertised = {
+			scheme: 'exact',
+			network: 'nano:mainnet',
+			amount: '1000000000000000000000000',
+			asset: 'XNO',
+			payTo: 'nano_194dqhek3tjcridnq7x76h7n8xrp4gmfpggn4erinqn6nr8anhwggkjj9ree',
+			maxTimeoutSeconds: 300,
+			extra: {},
+		};
+		const headerValue = Buffer.from(
+			JSON.stringify({ x402Version: 2, accepts: [advertised] }),
+		).toString('base64');
+
+		const requirements = parsePaymentRequired({ [HEADER_V2_PAYMENT_REQUIRED]: headerValue }, {});
+		const accept = findExactNanoAccept(requirements!.accepts);
+		expect(accept).toBeDefined();
+
+		const requiredCore: Record<string, unknown> = { ...advertised };
+		delete requiredCore.extra;
+		const echoed = { ...(accept!.rawAccept as Record<string, unknown>) };
+		delete echoed.extra;
+		expect(echoed).toEqual(requiredCore);
+	});
 });
 
 describe('payment payloads', () => {

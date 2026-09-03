@@ -49,6 +49,7 @@
 			"dist/nodes/X402Nano/X402NanoTrigger.node.js"
 		]
 	},
+	"dependencies": {},
 	"devDependencies": {
 		"@n8n/node-cli": "0.45.6",
 		"@release-it/conventional-changelog": "^12.0.0",

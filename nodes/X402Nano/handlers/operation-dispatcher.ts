@@ -9,6 +9,7 @@ import { buildSendBlock, signBlock, verifyBlock } from '../../../utils/block';
 import type { NanoStateBlock } from '../../../utils/block';
 import { isValidNanoAmount, nanoToRaw, rawToNano } from '../../../utils/conversions';
 import { X402PaymentError } from '../../../utils/errors';
+import { normalizeRequestHeaders } from '../../../utils/request-headers';
 import {
 	getFacilitatorConfig,
 	facilitatorGetSupported,
@@ -65,15 +66,12 @@ interface RequestSpec {
 }
 
 function readRequestSpec(context: IExecuteFunctions, i: number): RequestSpec {
-	const headersRaw = context.getNodeParameter('requestHeaders', i, '{}') as string;
-	let headers: Record<string, unknown> = {};
-	if (headersRaw && headersRaw.trim().length > 0) {
-		try {
-			headers = JSON.parse(headersRaw) as Record<string, unknown>;
-		} catch {
-			throw new NodeOperationError(context.getNode(), 'Headers must be a valid JSON object');
-		}
+	const headersParam = context.getNodeParameter('requestHeaders', i, '{}') as unknown;
+	const normalized = normalizeRequestHeaders(headersParam);
+	if (normalized.error) {
+		throw new NodeOperationError(context.getNode(), normalized.error.message);
 	}
+	const headers = normalized.headers;
 
 	const bodyType = context.getNodeParameter('bodyType', i, 'json') as string;
 	let jsonBody: unknown;
@@ -244,16 +242,31 @@ async function executePayment(
 		? signBlock(Buffer.from(privateKeyHex, 'hex'), built.hash)
 		: await signWithWallet(context, config, walletId, account, built.hash);
 
-	const block: NanoStateBlock = { ...built.block, work, signature };
-
-	const acceptV2: AcceptV2 = {
-		scheme: EXACT_SCHEME,
-		network: NANO_NETWORK,
-		amount: accept.amountRaw,
-		payTo: accept.payTo,
-		...(accept.asset ? { asset: accept.asset } : {}),
-		...(accept.extra ? { extra: accept.extra } : {}),
+	const block: NanoStateBlock = {
+		...built.block,
+		work: work.toUpperCase(),
+		signature: signature.toUpperCase(),
 	};
+
+	// Echo the wire accept verbatim when available: x402 core resource servers
+	// deep-equal the echoed `accepted` against their advertised requirements,
+	// so every advertised field (scheme, network, amount, asset, payTo,
+	// maxTimeoutSeconds, extra, …) must survive into the payment payload.
+	// Reconstructing a reduced copy (dropping e.g. maxTimeoutSeconds) makes the
+	// server answer 402 "No matching payment requirements".
+	const acceptV2: AcceptV2 = accept.rawAccept
+		? (accept.rawAccept as unknown as AcceptV2)
+		: {
+				scheme: EXACT_SCHEME,
+				network: NANO_NETWORK,
+				amount: accept.amountRaw,
+				payTo: accept.payTo,
+				...(accept.asset ? { asset: accept.asset } : {}),
+				...(accept.maxTimeoutSeconds !== undefined
+					? { maxTimeoutSeconds: accept.maxTimeoutSeconds }
+					: {}),
+				...(accept.extra ? { extra: accept.extra } : {}),
+			};
 
 	const payload: PaymentPayloadV1 | PaymentPayloadV2 =
 		version === 2
