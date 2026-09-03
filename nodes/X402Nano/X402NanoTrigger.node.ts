@@ -40,16 +40,27 @@ export class X402NanoTrigger implements INodeType {
 				name: 'default',
 				httpMethod: 'POST',
 				responseMode: 'responseNode',
-				path: 'x402/{{$webhookId}}',
+				isFullPath: true,
+				path: '={{$parameter.path}}',
 			},
 			{
 				name: 'setup',
 				httpMethod: 'GET',
 				responseMode: 'responseNode',
-				path: 'x402/{{$webhookId}}',
+				isFullPath: true,
+				path: '={{$parameter.path}}',
 			},
 		],
 		properties: [
+			{
+				displayName: 'Path',
+				name: 'path',
+				type: 'string',
+				default: '',
+				placeholder: 'x402',
+				description:
+					'The webhook path to listen to. Leave empty for a unique URL based on the webhook ID. Dynamic values can be specified using \':\', e.g. \'x402/:identifier\'.',
+			},
 			{
 				displayName: 'Paywall Flow',
 				name: 'paywallNotice',

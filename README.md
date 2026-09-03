@@ -23,8 +23,14 @@ An n8n community node package for the **x402 payment protocol** with **Nano (XNO
 ### `X402 Nano Trigger` node (resource server — seller)
 
 A webhook that turns any n8n workflow into a paid endpoint (listens on GET and
-POST). Each trigger instance gets a unique webhook path (`/x402/<webhookId>`),
-so several paywall workflows can run on the same n8n instance:
+POST). The `Path` parameter controls the webhook URL:
+
+- **empty** (default) → unique URL per instance: `…/webhook/<webhookId>` — the
+  same behavior as the built-in Webhook node, so several paywall workflows can
+  run on the same n8n instance without collisions
+- **static path** (e.g. `x402`) → `…/webhook/x402` (one paywall per instance)
+- **dynamic path** (e.g. `x402/:id`) → `…/webhook/<webhookId>/x402/<anything>`,
+  captured in `$json.params`
 
 ```
 X402 Nano Trigger (request with or without payment)
@@ -68,6 +74,10 @@ The Nano block inside `payload` is identical in both versions.
 - **Receive-tier proof of work.** Receive Pending generates the cheaper
   receive-tier work when the node supports it (falls back to base difficulty
   otherwise); x402 payments themselves always require base difficulty.
+- **Use `*Raw` fields for arithmetic.** Node outputs carry both raw and
+  formatted amounts (`amountRaw`/`amountNano`, `balanceRaw`/`balanceNano`).
+  `BigInt()` only works on the integer `*Raw` fields — the formatted decimals
+  are display-only.
 
 ## Development
 

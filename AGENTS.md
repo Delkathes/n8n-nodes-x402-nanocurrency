@@ -29,7 +29,11 @@ payment requirements, and the client retries the request with a signed payment
 - **X402 Nano Trigger** (`nodes/X402Nano/X402NanoTrigger.node.ts`) — resource
   server (seller): webhook that passes requests to the workflow, which answers
   with 402 + `PAYMENT-REQUIRED` or 200 + `PAYMENT-RESPONSE` via a
-  Respond to Webhook node.
+  Respond to Webhook node. Webhook entries use `isFullPath: true` and
+  `path: ={{$parameter.path}}` — n8n does NOT resolve `{{$webhookId}}`
+  placeholders in paths (verified against n8n 2.36 source), so the node's
+  `path` parameter (default empty → unique webhook-ID URL) is the only way to
+  control the URL. Keep the path parameterized; never hardcode the placeholder.
 
 ## Hard rules
 
