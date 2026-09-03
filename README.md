@@ -20,38 +20,35 @@ An n8n community node package for the **x402 payment protocol** with **Nano (XNO
 | Response | Build 402 Payment Required | Build the 402 headers + body for a paywall webhook (v1, v2 or both, optional maxTimeoutSeconds) |
 | Response | Build Payment Response | Build the settlement response headers for a paid request |
 
-### `X402 Nano Trigger` node (resource server — seller)
+### `X402 Nano Classify` node (resource server — seller)
 
-A webhook that turns any n8n workflow into a paid endpoint (listens on GET and
-POST). Two node versions are shipped:
+Turns any workflow into a paid endpoint. Place it **after a built-in Webhook
+node** (the Respond to Webhook node only works with the built-in Webhook /
+Form / Chat triggers) and it classifies every request into two labeled
+outputs:
 
-- **v2 (recommended)** — classifies every request into two labeled outputs:
-  - **`Unpaid request`** — no v1/v2 payment header (probe requests; GET
-    doubles as a browser probe and lands here → answer 402)
-  - **`Paid request`** — a payment header is present. The item carries
-    `payment: { hasPayment, protocol ('v2'|'v1'), headerName, headerValue,
-    headerInvalid }` plus normalized lowercase `headers`. When
-    `headerInvalid` is `true` the client sent an unusable payment header
-    (empty or non-base64) — answer a distinct 402 rather than re-offering.
-    Classification only; content verification stays in Verify Payment.
-- **v1** — passthrough: every request (headers, params, query, body) on a
-  single output; the workflow decides how to answer.
+- **`Unpaid request`** — no v1/v2 payment header (probe requests; GET
+  doubles as a browser probe and lands here → answer 402)
+- **`Paid request`** — a payment header is present. The item carries
+  `payment: { hasPayment, protocol ('v2'|'v1'), headerName, headerValue,
+  headerInvalid }` plus normalized lowercase `headers`. When
+  `headerInvalid` is `true` the client sent an unusable payment header
+  (empty or non-base64) — answer a distinct 402 rather than re-offering.
+  Classification only; content verification stays in Verify Payment.
 
-The `Path` parameter controls the webhook URL (same for both versions):
+The built-in Webhook node's `Path` parameter controls the webhook URL:
 
-- **empty** (default) → unique URL per instance: `…/webhook/<webhookId>` — the
-  same behavior as the built-in Webhook node, so several paywall workflows can
-  run on the same n8n instance without collisions
+- **empty** (default) → unique URL per instance: `…/webhook/<webhookId>`
 - **static path** (e.g. `x402`) → `…/webhook/x402` (one paywall per instance)
 - **dynamic path** (e.g. `x402/:id`) → `…/webhook/<webhookId>/x402/<anything>`,
   captured in `$json.params`
 
 ```
-X402 Nano Trigger (request with or without payment)
-├─ no payment header  → Build 402 Payment Required → Respond 402 + PAYMENT-REQUIRED
-└─ paid request       → Verify Payment + Settle Payment (facilitator or local RPC)
-                        → your business nodes (NanoGPT, ...)
-                        → Build Payment Response → Respond 200 + PAYMENT-RESPONSE
+Webhook → X402 Nano Classify (request with or without payment)
+├─ Unpaid output   → Build 402 Payment Required → Respond 402 + PAYMENT-REQUIRED
+└─ Paid output     → Verify Payment + Settle Payment (facilitator or local RPC)
+                    → your business nodes (NanoGPT, ...)
+                    → Build Payment Response → Respond 200 + PAYMENT-RESPONSE
 ```
 
 ## Protocol versions

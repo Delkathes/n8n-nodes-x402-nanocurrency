@@ -26,22 +26,21 @@ payment requirements, and the client retries the request with a signed payment
     (not the 64-zero previous hash); an optional representative parameter
     applies to open blocks only. Receive blocks use receive-tier work
     difficulty with a base-difficulty fallback.
-- **X402 Nano Trigger** (`nodes/X402Nano/X402NanoTrigger.node.ts`) — resource
-  server (seller): two typeVersions in the same file. v1 is a passthrough
-  webhook (single output). v2 has two labeled outputs (Unpaid request / Paid
-  request) and classifies requests natively via
-  `utils/paywall-classifier.ts` (`classifyPaywallRequest`): normalized
-  lowercase headers + `payment` object (`hasPayment`, `protocol`, `headerName`,
-  `headerValue`, `headerInvalid`). Classification only — no payload decoding
-  (Verify Payment's job). Webhook entries use `isFullPath: true` and
-  `path: ={{$parameter.path}}` — n8n does NOT resolve `{{$webhookId}}`
-  placeholders in paths (verified against n8n 2.36 source), so the node's
-  `path` parameter (default empty → unique webhook-ID URL) is the only way to
-  control the URL. `webhook()` MUST return
-  `{ noWebhookResponse: true, workflowData: [[items]] }` — `workflowData`
-  starts the execution (missing it hangs the request: verified against
-  webhook-helpers.js in n8n 2.36); both output arrays must always be emitted
-  even when empty. `webhookMethods` needs a symmetric entry per webhook name.
+- **X402 Nano Classify** (`nodes/X402Nano/X402NanoClassify.node.ts`) — resource
+  server (seller): transform node with two labeled outputs (Unpaid request /
+  Paid request) placed after a built-in Webhook node. Classifies requests
+  natively via `utils/paywall-classifier.ts` (`classifyPaywallRequest`):
+  normalized lowercase headers + `payment` object (`hasPayment`, `protocol`,
+  `headerName`, `headerValue`, `headerInvalid`). Classification only — no
+  payload decoding (Verify Payment's job). IMPORTANT: a custom webhook TRIGGER
+  node cannot drive a Respond to Webhook workflow — the Respond to Webhook
+  node only accepts `n8n-nodes-base.webhook`, `formTrigger`, `chatTrigger` and
+  `wait` as ancestor types (verified against n8n 2.36
+  RespondToWebhook.node.js WEBHOOK_NODE_TYPES). That is why classification is
+  a transform node, not a trigger. Webhook plumbing is left to the built-in
+  Webhook node: its path parameter is full-path (`isFullPath`) and n8n does
+  NOT resolve `{{$webhookId}}` placeholders in paths (verified against
+  getNodeWebhookPath in n8n 2.36).
 
 ## Hard rules
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { X402Nano } from '../nodes/X402Nano/X402Nano.node';
-import { X402NanoTrigger } from '../nodes/X402Nano/X402NanoTrigger.node';
+import { X402NanoClassify } from '../nodes/X402Nano/X402NanoClassify.node';
 import { X402FacilitatorApi } from '../credentials/X402FacilitatorApi.credentials';
 import { X402NanoApi } from '../credentials/X402NanoApi.credentials';
 
@@ -10,8 +10,8 @@ describe('scaffold', () => {
 		expect(new X402Nano().description.name).toBe('x402Nano');
 	});
 
-	it('exports the trigger node description', () => {
-		expect(new X402NanoTrigger().description.name).toBe('x402NanoTrigger');
+	it('exports the classify node description', () => {
+		expect(new X402NanoClassify().description.name).toBe('x402NanoClassify');
 	});
 
 	it('declares the expected credentials on the client node', () => {

@@ -46,7 +46,7 @@
 		],
 		"nodes": [
 			"dist/nodes/X402Nano/X402Nano.node.js",
-			"dist/nodes/X402Nano/X402NanoTrigger.node.js"
+			"dist/nodes/X402Nano/X402NanoClassify.node.js"
 		]
 	},
 	"dependencies": {},
