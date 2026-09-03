@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.0...0.3.1) (2026-09-03)
+
+### Bug Fixes
+
+* open-block work root, modern work_validate fields, idempotent replay verification ([82645e8](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/82645e81a89466c56c4edbcff79269585ce691c2))
+
 # [0.3.0](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.2.0...0.3.0) (2026-09-03)
 
 ### Features
