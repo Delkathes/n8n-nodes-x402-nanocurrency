@@ -32,6 +32,7 @@ import {
 	getPendingBlocks,
 	validateWork,
 	getBlockInfo,
+	RECEIVE_WORK_DIFFICULTY,
 } from '../../../utils/nano-rpc';
 import {
 	EXACT_SCHEME,
@@ -659,14 +660,19 @@ async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promi
 			replayed = blockInfo !== null;
 			if (blockInfo) {
 				const replayPayerMatches = blockInfo.account === block.account;
-				const replayAmountMatches = !blockInfo.amount || blockInfo.amount === amountRaw;
+				const replayAmountMatches = blockInfo.amount === amountRaw;
+				const replaySubtypeMatches = blockInfo.subtype === 'send';
 				const replayLinkMatches =
 					Boolean(blockInfo.linkAsAccount && blockInfo.linkAsAccount === payTo) ||
 					Boolean(
 						blockInfo.link &&
 							blockInfo.link.toLowerCase() === (decodePayToHex(payTo) ?? '').toLowerCase(),
 					);
-				replayMatched = replayPayerMatches && replayAmountMatches && replayLinkMatches;
+				replayMatched =
+					replayPayerMatches &&
+					replayAmountMatches &&
+					replaySubtypeMatches &&
+					replayLinkMatches;
 			}
 		} catch {
 			replayed = false;
@@ -861,7 +867,9 @@ async function handleReceivePending(context: IExecuteFunctions, i: number): Prom
 				`Cannot resolve the work root for account ${account}: invalid account address or frontier`,
 			);
 		}
-		const work = await generateWork(context, config, workRoot);
+		const work = await generateWork(context, config, workRoot, {
+			difficulty: RECEIVE_WORK_DIFFICULTY,
+		});
 		const signature = privateKeyHex
 			? signBlock(Buffer.from(privateKeyHex, 'hex'), built.hash)
 			: await signWithWallet(context, config, walletId, account, built.hash);

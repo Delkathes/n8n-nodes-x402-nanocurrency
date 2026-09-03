@@ -121,18 +121,18 @@ export async function getPendingBlocks(
 
 /**
  * Parse a work_validate RPC response.
- * Nano V27+ answers with `valid_all` / `valid_receive`; older nodes answer
- * with `valid`. All of them use "1" for valid and "0" for invalid.
+ * Nano V27+ answers with `valid_all` (base difficulty) and `valid_receive`
+ * (weaker receive tier); older nodes answer with `valid`. x402 payments are
+ * always send blocks, so only base-difficulty validity counts — a send with
+ * mere receive-tier work would pass validation here but be rejected by
+ * `process` ("Invalid work") at settlement.
  */
 export function parseWorkValidation(data: Record<string, unknown>): boolean {
 	const validAll = String(data.valid_all ?? '');
-	const validReceive = String(data.valid_receive ?? '');
 	const valid = String(data.valid ?? '');
 	return (
 		validAll === '1' ||
 		validAll === 'true' ||
-		validReceive === '1' ||
-		validReceive === 'true' ||
 		valid === '1' ||
 		valid === 'true'
 	);
@@ -207,15 +207,39 @@ export async function getBlockInfo(
 	};
 }
 
-/** Generate proof of work for a block hash (previous/frontier). */
+/** Receive-tier difficulty (Nano V26+): receives are valid at this lower bar. */
+export const RECEIVE_WORK_DIFFICULTY = 'fffffff800000000';
+
+/**
+ * Generate proof of work for a block hash (previous/frontier). An optional
+ * `difficulty` generates tiered work (e.g. the cheaper receive tier); when
+ * the node rejects the difficulty parameter or returns an unusable response,
+ * the call falls back to base difficulty.
+ */
 export async function generateWork(
 	context: IExecuteFunctions,
 	config: NanoRpcConfig,
 	hash: string,
+	options: { difficulty?: string } = {},
 ): Promise<string> {
 	const target: NanoRpcConfig = config.workServerUrl
 		? { ...config, rpcUrl: config.workServerUrl }
 		: config;
+
+	if (options.difficulty) {
+		try {
+			const tiered = await nanoRpcCall(context, target, 'work_generate', {
+				hash,
+				difficulty: options.difficulty,
+			});
+			if (typeof tiered.work === 'string' && tiered.work.length === 16) {
+				return tiered.work;
+			}
+		} catch {
+			// fall through to base difficulty
+		}
+	}
+
 	const data = await nanoRpcCall(context, target, 'work_generate', { hash });
 	if (typeof data.work !== 'string' || data.work.length !== 16) {
 		throw new X402PaymentError(

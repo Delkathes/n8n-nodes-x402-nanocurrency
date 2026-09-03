@@ -54,6 +54,21 @@ The Nano block inside `payload` is identical in both versions.
 - **x402 Facilitator API** — facilitator base URL + optional API key (`/supported`, `/verify`, `/settle`)
 - **x402 Nano API** — Nano node RPC URL + auth, optional wallet (node signing via `enable_control`) or private key (local signing), optional work server
 
+## Known limitations
+
+- **Replay validity does not require confirmation.** A replayed payment is
+  treated as valid as soon as the block is on-chain (payer, amount, payTo and
+  `subtype: send` all matching), even before it cements — gating on
+  confirmation would re-open the retry → 402 → double-charge race. Settlement
+  remains the authoritative gate.
+- **Cross-server concurrency.** Two paywall endpoints verifying the same
+  fresh signature at the same time can both serve it (each sees "not yet
+  replayed"). Idempotency protects same-server retries only. For centralized
+  deduplication across endpoints, verify/settle through a facilitator.
+- **Receive-tier proof of work.** Receive Pending generates the cheaper
+  receive-tier work when the node supports it (falls back to base difficulty
+  otherwise); x402 payments themselves always require base difficulty.
+
 ## Development
 
 ```bash
