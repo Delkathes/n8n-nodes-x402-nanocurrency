@@ -35,7 +35,7 @@ export class X402NanoClassify implements INodeType {
 		defaults: {
 			name: 'X402 Nano Classify',
 		},
-		usableAsTool: false,
+		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [
 			{ type: NodeConnectionTypes.Main, displayName: 'Unpaid request' },
