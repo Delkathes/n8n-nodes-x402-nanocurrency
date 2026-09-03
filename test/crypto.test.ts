@@ -7,7 +7,7 @@ import {
 	verifyEd25519Blake2b,
 } from '../utils/ed25519-blake2b';
 import { decodeNanoAddress, encodeNanoAddress } from '../utils/nano-address';
-import { buildSendBlock, signBlock, verifyBlock } from '../utils/block';
+import { buildSendBlock, buildReceiveBlock, signBlock, verifyBlock, OPEN_BLOCK_PREVIOUS } from '../utils/block';
 import type { NanoStateBlock } from '../utils/block';
 
 // Real mainnet fixtures (fetched from a public Nano RPC node).
@@ -177,6 +177,103 @@ describe('send blocks', () => {
 				balanceRaw: '100',
 				toAddress: BURN_ACCOUNT,
 				amountRaw: '101',
+			}),
+		).toBeNull();
+	});
+});
+
+describe('receive blocks', () => {
+	const SOURCE_HASH = 'B'.repeat(64);
+
+	it('builds, signs and verifies a receive block', () => {
+		const accountPublicKey = derivePublicKey(TEST_PRIVATE_KEY);
+		const account = encodeNanoAddress(accountPublicKey) as string;
+
+		const built = buildReceiveBlock({
+			account,
+			previous: 'D'.repeat(64),
+			representative: account,
+			balanceRaw: '1000000000000000000000000000000',
+			sourceHash: SOURCE_HASH,
+			amountRaw: '50000000000000000000000000000',
+			sourceAccount: BURN_ACCOUNT,
+		});
+		expect(built).not.toBeNull();
+
+		const signature = signBlock(TEST_PRIVATE_KEY, built!.hash);
+		const signed: NanoStateBlock = {
+			...built!.block,
+			work: '2bf29ef00786a6bc',
+			signature,
+		};
+
+		expect(signed.balance).toBe('1050000000000000000000000000000');
+		expect(signed.link).toBe(SOURCE_HASH);
+		expect(signed.link_as_account).toBe(BURN_ACCOUNT);
+		expect(verifyBlock(signed, built!.hash)).toBe(true);
+	});
+
+	it('builds an open block when the account has no frontier', () => {
+		const accountPublicKey = derivePublicKey(TEST_PRIVATE_KEY);
+		const account = encodeNanoAddress(accountPublicKey) as string;
+
+		const built = buildReceiveBlock({
+			account,
+			representative: account,
+			balanceRaw: '0',
+			sourceHash: SOURCE_HASH,
+			amountRaw: '100000000000000000000000000000',
+		});
+		expect(built).not.toBeNull();
+		expect(built!.block.previous).toBe(OPEN_BLOCK_PREVIOUS);
+
+		const signature = signBlock(TEST_PRIVATE_KEY, built!.hash);
+		const signed: NanoStateBlock = {
+			...built!.block,
+			work: '2bf29ef00786a6bc',
+			signature,
+		};
+		expect(verifyBlock(signed, built!.hash)).toBe(true);
+	});
+
+	it('emits uppercase hex for previous and link', () => {
+		const accountPublicKey = derivePublicKey(TEST_PRIVATE_KEY);
+		const account = encodeNanoAddress(accountPublicKey) as string;
+
+		const built = buildReceiveBlock({
+			account,
+			previous: 'e'.repeat(64),
+			representative: account,
+			balanceRaw: '100',
+			sourceHash: SOURCE_HASH.toLowerCase(),
+			amountRaw: '1',
+		});
+		expect(built).not.toBeNull();
+		expect(built!.block.previous).toBe('E'.repeat(64));
+		expect(built!.block.link).toBe(SOURCE_HASH);
+	});
+
+	it('rejects invalid source hashes and overflowing balances', () => {
+		const accountPublicKey = derivePublicKey(TEST_PRIVATE_KEY);
+		const account = encodeNanoAddress(accountPublicKey) as string;
+
+		expect(
+			buildReceiveBlock({
+				account,
+				representative: account,
+				balanceRaw: '0',
+				sourceHash: 'not-a-hash',
+				amountRaw: '1',
+			}),
+		).toBeNull();
+
+		expect(
+			buildReceiveBlock({
+				account,
+				representative: account,
+				balanceRaw: '340282366920938463463374607431768211455', // MAX_UINT128
+				sourceHash: SOURCE_HASH,
+				amountRaw: '1',
 			}),
 		).toBeNull();
 	});

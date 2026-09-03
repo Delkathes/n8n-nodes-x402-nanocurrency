@@ -39,6 +39,13 @@ export class X402Nano implements INodeType {
 		],
 		properties: [
 			{
+				displayName: 'Heads-up: this node moves real Nano funds',
+				name: 'fundsNotice',
+				type: 'notice',
+				default:
+					'This node sends real Nano payments from your configured account. When it is exposed as an AI tool (usableAsTool), never let an agent invoke it with untrusted URLs, payTo addresses or amounts — a prompt injection could trigger real payments.',
+			},
+			{
 				displayName: 'Resource',
 				name: 'resource',
 				type: 'options',
@@ -116,6 +123,12 @@ export class X402Nano implements INodeType {
 						value: 'probeUpstreamPrice',
 						description: 'Fetch payment requirements from a paywalled upstream URL with an optional markup',
 						action: 'Probe upstream price',
+					},
+					{
+						name: 'Receive Pending',
+						value: 'receivePending',
+						description: 'Receive all pending sends on the configured account (open/receive blocks)',
+						action: 'Receive pending payments',
 					},
 					{
 						name: 'Settle Payment',
@@ -334,13 +347,13 @@ export class X402Nano implements INodeType {
 				type: 'string',
 				displayOptions: {
 					show: {
-						operation: ['pay', 'buildPaymentSignature'],
+						operation: ['pay', 'buildPaymentSignature', 'receivePending'],
 					},
 				},
 				default: '',
 				placeholder: 'nano_1abc...',
 				description:
-					'Paying account when signing with the node wallet. Overrides the credential source account. Ignored when a private key is configured.',
+					'Paying or receiving account when signing with the node wallet. Overrides the credential source account. Ignored when a private key is configured.',
 			},
 			{
 				displayName: 'Work Value',
@@ -517,7 +530,8 @@ export class X402Nano implements INodeType {
 					{
 						name: 'Local (Nano RPC)',
 						value: 'local',
-						description: 'Verify the signature and payTo locally against your Nano node, without a facilitator',
+						description:
+							'Verify locally against your Nano node: signature, payTo, proof of work, payer frontier and confirmation, plus replay detection. Best-effort — settling the block remains the authoritative gate.',
 					},
 				],
 				default: 'facilitator',

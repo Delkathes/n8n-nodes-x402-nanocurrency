@@ -1,4 +1,4 @@
-# AGENTS.md - n8n-nodes-x402nano
+# AGENTS.md - n8n-nodes-x402-nanocurrency
 
 Guidelines for agentic coding tools working on the n8n-nodes-x402nano repository,
 an n8n community node package implementing the x402 payment protocol with Nano (XNO).
@@ -10,8 +10,13 @@ payment requirements, and the client retries the request with a signed payment
 (Nano send block) in a header. This package provides both sides for n8n:
 
 - **X402 Nano** (`nodes/X402Nano/X402Nano.node.ts`) — client (payer): Pay,
-  Probe, Build Payment Signature, Verify/Settle/Supported against a facilitator,
-  Probe Upstream Price.
+  Probe, Build Payment Signature, Verify/Settle/Receive Pending/Supported
+  (facilitator or local Nano RPC), Probe Upstream Price.
+  - Local Verify Payment is best-effort: signature, payTo, work_validate,
+    payer frontier + confirmed frontier, replay detection (block_info).
+    Settlement (process) is the authoritative gate.
+  - Receive Pending broadcasts open/receive blocks for confirmed pending
+    sends (local-mode sellers must call it to move funds out of pending).
 - **X402 Nano Trigger** (`nodes/X402Nano/X402NanoTrigger.node.ts`) — resource
   server (seller): webhook that passes requests to the workflow, which answers
   with 402 + `PAYMENT-REQUIRED` or 200 + `PAYMENT-RESPONSE` via a

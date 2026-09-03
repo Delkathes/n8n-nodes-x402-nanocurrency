@@ -5,7 +5,14 @@ import { NodeOperationError } from 'n8n-workflow';
 
 import { derivePublicKey } from '../../../utils/ed25519-blake2b';
 import { decodeNanoAddress, encodeNanoAddress } from '../../../utils/nano-address';
-import { buildSendBlock, signBlock, verifyBlock } from '../../../utils/block';
+import {
+	buildSendBlock,
+	buildReceiveBlock,
+	computeStateBlockHash,
+	signBlock,
+	verifyBlock,
+	OPEN_BLOCK_PREVIOUS,
+} from '../../../utils/block';
 import type { NanoStateBlock } from '../../../utils/block';
 import { isValidNanoAmount, nanoToRaw, rawToNano } from '../../../utils/conversions';
 import { X402PaymentError } from '../../../utils/errors';
@@ -22,10 +29,14 @@ import {
 	generateWork,
 	processBlock,
 	signWithWallet,
+	getPendingBlocks,
+	validateWork,
+	blockExists,
 } from '../../../utils/nano-rpc';
 import {
 	EXACT_SCHEME,
 	NANO_NETWORK,
+	HEADER_V2_PAYMENT_REQUIRED,
 	buildPaymentPayloadV1,
 	buildPaymentPayloadV2,
 	buildPaymentRequiredV1,
@@ -441,25 +452,26 @@ async function handleBuildPaymentSignature(
 		if (!headerValue || headerValue.trim().length === 0) {
 			throw new NodeOperationError(context.getNode(), 'PAYMENT-REQUIRED header value is required');
 		}
+		const trimmed = headerValue.trim();
+		const isJsonBody = trimmed.startsWith('{');
 		const requirements = parsePaymentRequired(
-			{ [headerValue.startsWith('{') ? 'body' : 'PAYMENT-REQUIRED']: headerValue },
-			undefined,
+			isJsonBody ? undefined : { [HEADER_V2_PAYMENT_REQUIRED]: trimmed },
+			isJsonBody ? trimmed : undefined,
 		);
-		// Fall back to direct v2 header parsing when the value is the raw header.
-		const direct = parseV2PaymentRequiredValue(headerValue);
-		const accept = requirements
-			? findExactNanoAccept(requirements.accepts)
-			: direct
-				? findExactNanoAccept(direct.accepts)
-				: undefined;
-
-		if (!accept || !requirements || !direct) {
+		if (!requirements) {
 			throw new NodeOperationError(
 				context.getNode(),
-				'The header does not contain a parseable x402 payment requirement with an exact nano:mainnet option',
+				'The header does not contain a parseable x402 payment requirement (expected a PAYMENT-REQUIRED header value or a requirements JSON object)',
 			);
 		}
-		version = 2;
+		const accept = findExactNanoAccept(requirements.accepts);
+		if (!accept) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'The payment requirements do not contain an exact nano:mainnet option',
+			);
+		}
+		version = requirements.version;
 		payTo = accept.payTo;
 		amountNano = rawToNano(accept.amountRaw);
 		paymentId = accept.paymentId;
@@ -503,14 +515,6 @@ async function handleBuildPaymentSignature(
 		amountRaw,
 		amountNano: rawToNano(amountRaw),
 	};
-}
-
-function parseV2PaymentRequiredValue(value: string): ReturnType<typeof parsePaymentRequired> {
-	const trimmed = value.trim();
-	if (!trimmed.startsWith('{')) {
-		return parsePaymentRequired({ 'PAYMENT-REQUIRED': trimmed }, undefined);
-	}
-	return null;
 }
 
 async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promise<IDataObject> {
@@ -570,22 +574,64 @@ async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promi
 	const nanoCredentials = await context.getCredentials('x402NanoApi');
 	const nanoConfig = getNanoRpcConfig(nanoCredentials);
 
-	const payToMatches = (block.link_as_account === payTo) || (block.link.toLowerCase() === (decodePayToHex(payTo) ?? '').toLowerCase());
-	const signatureValid = verifyBlock(block);
+	const payToMatches =
+		block.link_as_account === payTo ||
+		block.link.toLowerCase() === (decodePayToHex(payTo) ?? '').toLowerCase();
+	const computedHash = computeStateBlockHash(block);
+	const signatureValid = computedHash
+		? verifyBlock(block, computedHash.toString('hex'))
+		: false;
+
 	let balanceSufficient = false;
+	let frontierMatches = false;
+	let confirmedFrontierMatches = false;
 	try {
-		const info = await getAccountInfo(context, nanoConfig, block.account);
+		const info = await getAccountInfo(context, nanoConfig, block.account, {
+			includeConfirmed: true,
+		});
 		balanceSufficient = BigInt(info.balance) >= BigInt(amountRaw);
+		frontierMatches = info.frontier.toLowerCase() === block.previous.toLowerCase();
+		if (info.confirmedFrontier) {
+			confirmedFrontierMatches =
+				info.confirmedFrontier.toLowerCase() === block.previous.toLowerCase();
+		}
 	} catch {
 		balanceSufficient = false;
 	}
 
-	const isValid = payToMatches && signatureValid && balanceSufficient;
+	let workValid = false;
+	try {
+		workValid = await validateWork(context, nanoConfig, block.previous, block.work);
+	} catch {
+		workValid = false;
+	}
+
+	let replayed = false;
+	if (computedHash) {
+		try {
+			replayed = await blockExists(context, nanoConfig, computedHash.toString('hex'));
+		} catch {
+			replayed = false;
+		}
+	}
+
+	const isValid =
+		payToMatches &&
+		signatureValid &&
+		balanceSufficient &&
+		workValid &&
+		frontierMatches &&
+		confirmedFrontierMatches &&
+		!replayed;
 	const invalidReason = !isValid
 		? [
 				!payToMatches ? 'payTo does not match the block link' : '',
 				!signatureValid ? 'block signature is invalid' : '',
 				!balanceSufficient ? 'payer balance is insufficient' : '',
+				!workValid ? 'block proof of work is invalid' : '',
+				!frontierMatches ? 'block previous does not match the payer frontier' : '',
+				!confirmedFrontierMatches ? 'payer frontier is not confirmed' : '',
+				replayed ? 'payment block was already processed (replay)' : '',
 			]
 				.filter(Boolean)
 				.join(', ')
@@ -602,6 +648,10 @@ async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promi
 			payToMatches,
 			signatureValid,
 			balanceSufficient,
+			workValid,
+			frontierMatches,
+			confirmedFrontierMatches,
+			replayed,
 		},
 	};
 }
@@ -678,6 +728,98 @@ async function handleSettlePayment(context: IExecuteFunctions, i: number): Promi
 		amountRaw,
 		amountNano: rawToNano(amountRaw),
 	};
+}
+
+async function handleReceivePending(context: IExecuteFunctions, i: number): Promise<IDataObject> {
+	const credentials = await context.getCredentials('x402NanoApi');
+	const config = getNanoRpcConfig(credentials);
+	const privateKeyHex = ((credentials.privateKey as string) ?? '').trim();
+	const walletId = ((credentials.walletId as string) ?? '').trim();
+	const accountParam = context.getNodeParameter('sourceAccount', i, '') as string;
+
+	let account: string;
+	if (privateKeyHex) {
+		if (!/^[0-9a-fA-F]{64}$/.test(privateKeyHex)) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'The private key in the credentials must be a 64-character hex string',
+			);
+		}
+		const publicKey = derivePublicKey(Buffer.from(privateKeyHex, 'hex'));
+		account = encodeNanoAddress(publicKey) as string;
+	} else {
+		account = (accountParam || (credentials.sourceAccount as string) || '').trim();
+		if (!account) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'Either a private key or a wallet ID + source account are required to receive. Configure the x402 Nano API credential.',
+			);
+		}
+		if (!walletId) {
+			throw new NodeOperationError(
+				context.getNode(),
+				'No wallet ID configured in the x402 Nano API credential and no private key provided',
+			);
+		}
+	}
+
+	const pendings = await getPendingBlocks(context, config, account);
+	if (pendings.length === 0) {
+		return { account, count: 0, received: [] };
+	}
+
+	let info: { frontier: string; balance: string; representative: string };
+	try {
+		info = await getAccountInfo(context, config, account);
+	} catch {
+		info = { frontier: '', balance: '0', representative: account };
+	}
+
+	const received: Array<Record<string, unknown>> = [];
+	for (const pending of pendings) {
+		const built = buildReceiveBlock({
+			account,
+			previous: info.frontier,
+			representative: info.representative,
+			balanceRaw: info.balance,
+			sourceHash: pending.hash,
+			amountRaw: pending.amount,
+			...(pending.source ? { sourceAccount: pending.source } : {}),
+		});
+		if (!built) {
+			throw new NodeOperationError(
+				context.getNode(),
+				`Cannot build a receive block for pending ${pending.hash}: invalid account state or amount`,
+			);
+		}
+
+		const work = await generateWork(context, config, info.frontier || OPEN_BLOCK_PREVIOUS);
+		const signature = privateKeyHex
+			? signBlock(Buffer.from(privateKeyHex, 'hex'), built.hash)
+			: await signWithWallet(context, config, walletId, account, built.hash);
+
+		const block: NanoStateBlock = {
+			...built.block,
+			work: work.toUpperCase(),
+			signature: signature.toUpperCase(),
+		};
+		const hash = await processBlock(context, config, block as unknown as Record<string, unknown>);
+
+		info = {
+			frontier: hash,
+			balance: built.block.balance,
+			representative: built.block.representative,
+		};
+		received.push({
+			hash,
+			account,
+			amountRaw: pending.amount,
+			amountNano: rawToNano(pending.amount),
+			...(pending.source ? { source: pending.source } : {}),
+		});
+	}
+
+	return { account, count: received.length, received };
 }
 
 async function handleSupported(context: IExecuteFunctions): Promise<IDataObject> {
@@ -795,6 +937,8 @@ export async function dispatchX402Operation(params: {
 				return await handleVerifyPayment(context, i);
 			case 'settlePayment':
 				return await handleSettlePayment(context, i);
+			case 'receivePending':
+				return await handleReceivePending(context, i);
 			case 'supported':
 				return await handleSupported(context);
 			case 'probeUpstreamPrice':

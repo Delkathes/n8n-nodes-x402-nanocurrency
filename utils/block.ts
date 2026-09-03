@@ -41,6 +41,25 @@ export interface SendBlockParams {
 	amountRaw: string;
 }
 
+export interface ReceiveBlockParams {
+	/** Receiving account address */
+	account: string;
+	/** Account frontier block hash. Empty for an unopened account (open block). */
+	previous?: string;
+	/** Account representative address */
+	representative: string;
+	/** Account confirmed balance in raw (before receiving) */
+	balanceRaw: string;
+	/** Hash of the pending send block to receive */
+	sourceHash: string;
+	/** Amount of the pending send in raw */
+	amountRaw: string;
+	/** Sender account address, when known (echoed as link_as_account) */
+	sourceAccount?: string;
+}
+
+export const OPEN_BLOCK_PREVIOUS = '0'.repeat(64);
+
 function hexToBytes(hex: string): Buffer | null {
 	if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
 		return null;
@@ -154,6 +173,56 @@ export function buildSendBlock(
 		balance: (balance - amount).toString(),
 		link: toKey.toString('hex').toUpperCase(),
 		link_as_account: params.toAddress,
+		work: '',
+		signature: '',
+	};
+
+	const hash = computeStateBlockHash(block);
+	if (!hash) {
+		return null;
+	}
+
+	return { block, hash: hash.toString('hex') };
+}
+
+/**
+ * Build an unsigned Nano state receive (or open) block.
+ * Receives a pending send referenced by its block hash. When the account has
+ * no frontier, an open block is built (previous = 64 zero bytes).
+ */
+export function buildReceiveBlock(
+	params: ReceiveBlockParams,
+): { block: NanoStateBlock; hash: string } | null {
+	if (!hexToBytes(params.sourceHash) || hexToBytes(params.sourceHash)?.length !== 32) {
+		return null;
+	}
+
+	let balance: bigint;
+	let amount: bigint;
+	try {
+		balance = BigInt(params.balanceRaw);
+		amount = BigInt(params.amountRaw);
+	} catch {
+		return null;
+	}
+	if (amount <= 0n || balance + amount > MAX_UINT128) {
+		return null;
+	}
+
+	const previous = (params.previous ?? '').trim() || OPEN_BLOCK_PREVIOUS;
+	const previousBytes = hexToBytes(previous);
+	if (!previousBytes || previousBytes.length !== 32) {
+		return null;
+	}
+
+	const block: NanoStateBlock = {
+		type: 'state',
+		account: params.account,
+		previous: previous.toUpperCase(),
+		representative: params.representative,
+		balance: (balance + amount).toString(),
+		link: params.sourceHash.toUpperCase(),
+		...(params.sourceAccount ? { link_as_account: params.sourceAccount } : {}),
 		work: '',
 		signature: '',
 	};

@@ -15,7 +15,7 @@ export interface FacilitatorConfig {
 }
 
 export function getFacilitatorConfig(credentials: ICredentialDataDecryptedObject): FacilitatorConfig {
-	const baseUrl = ((credentials.facilitatorUrl as string) || 'http://localhost:5555/facilitator')
+	const baseUrl = ((credentials.facilitatorUrl as string) || 'https://x402nano.org/facilitator')
 		.trim()
 		.replace(/\/+$/, '');
 	return { baseUrl, timeoutMs: 30000 };

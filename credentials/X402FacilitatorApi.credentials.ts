@@ -15,8 +15,8 @@ export class X402FacilitatorApi implements ICredentialType {
 			displayName: 'Facilitator URL',
 			name: 'facilitatorUrl',
 			type: 'string',
-			default: 'http://localhost:5555/facilitator',
-			placeholder: 'https://facilitator.example.com',
+			default: 'https://x402nano.org/facilitator',
+			placeholder: 'https://x402nano.org/facilitator',
 			description: 'Base URL of the x402 facilitator service (exposes /supported, /verify and /settle)',
 		},
 		{
@@ -27,7 +27,7 @@ export class X402FacilitatorApi implements ICredentialType {
 				password: true,
 			},
 			default: '',
-			description: 'Optional API key for the facilitator (sent as an x-api-key header)',
+			description: 'Optional API key for the facilitator (sent as an x-api-key header). Leave empty for the public x402nano.org facilitator',
 		},
 	];
 

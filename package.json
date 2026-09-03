@@ -1,5 +1,5 @@
 {
-	"name": "n8n-nodes-x402nano",
+	"name": "n8n-nodes-x402-nanocurrency",
 	"version": "0.1.0",
 	"description": "n8n community node for the x402 payment protocol with Nano (XNO): paywall triggers and payment flows for AI APIs and HTTP resources",
 	"license": "MIT",
