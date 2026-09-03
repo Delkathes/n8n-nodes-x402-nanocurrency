@@ -567,11 +567,18 @@ async function handleBuildPaymentSignature(
 	};
 }
 
-async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promise<IDataObject> {
-	const signatureValue = context.getNodeParameter('paymentSignature', i) as string;
-	const payTo = context.getNodeParameter('payTo', i) as string;
-	const amountNano = context.getNodeParameter('amount', i) as string;
-	const mode = context.getNodeParameter('verificationMode', i, 'facilitator') as string;
+export interface VerifyPaymentInput {
+	signatureValue: string;
+	payTo: string;
+	amountNano: string;
+	mode: 'facilitator' | 'local';
+}
+
+export async function runPaymentVerification(
+	context: IExecuteFunctions,
+	input: VerifyPaymentInput,
+): Promise<IDataObject> {
+	const { signatureValue, payTo, amountNano, mode } = input;
 
 	if (!isValidNanoAmount(amountNano)) {
 		throw new NodeOperationError(
@@ -661,32 +668,9 @@ async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promi
 	// has moved on). Instead of rejecting the request — which would make the
 	// client pay AGAIN with a fresh block — treat the replayed payment as valid
 	// when it demonstrably paid for these exact requirements.
-	let replayed = false;
-	let replayMatched = false;
-	if (computedHash) {
-		try {
-			const blockInfo = await getBlockInfo(context, nanoConfig, computedHash.toString('hex'));
-			replayed = blockInfo !== null;
-			if (blockInfo) {
-				const replayPayerMatches = blockInfo.account === block.account;
-				const replayAmountMatches = blockInfo.amount === amountRaw;
-				const replaySubtypeMatches = blockInfo.subtype === 'send';
-				const replayLinkMatches =
-					Boolean(blockInfo.linkAsAccount && blockInfo.linkAsAccount === payTo) ||
-					Boolean(
-						blockInfo.link &&
-							blockInfo.link.toLowerCase() === (decodePayToHex(payTo) ?? '').toLowerCase(),
-					);
-				replayMatched =
-					replayPayerMatches &&
-					replayAmountMatches &&
-					replaySubtypeMatches &&
-					replayLinkMatches;
-			}
-		} catch {
-			replayed = false;
-		}
-	}
+	const replay = await detectOnChainReplay(context, block, amountRaw, payTo);
+	const replayed = replay.replayed;
+	const replayMatched = replay.matched;
 
 	const isValid = replayed
 		? replayMatched
@@ -729,16 +713,82 @@ async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promi
 	};
 }
 
+async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promise<IDataObject> {
+	const signatureValue = context.getNodeParameter('paymentSignature', i) as string;
+	const payTo = context.getNodeParameter('payTo', i) as string;
+	const amountNano = context.getNodeParameter('amount', i) as string;
+	const mode = context.getNodeParameter('verificationMode', i, 'facilitator') as string;
+
+	return runPaymentVerification(context, {
+		signatureValue,
+		payTo,
+		amountNano,
+		mode: mode as 'facilitator' | 'local',
+	});
+}
+
 function decodePayToHex(address: string): string | null {
 	const key = decodeNanoAddress(address);
 	return key ? key.toString('hex') : null;
 }
 
-async function handleSettlePayment(context: IExecuteFunctions, i: number): Promise<IDataObject> {
-	const signatureValue = context.getNodeParameter('paymentSignature', i) as string;
-	const payTo = context.getNodeParameter('payTo', i) as string;
-	const amountNano = context.getNodeParameter('amount', i) as string;
-	const mode = context.getNodeParameter('settleMode', i, 'facilitator') as string;
+/**
+ * Check whether the payment's send block is already on-chain (i.e. it was
+ * settled by an earlier attempt). Returns `matched: true` only when the
+ * on-chain block demonstrably paid for these exact requirements (payer,
+ * amount, subtype send, link == payTo). Used to make client retries
+ * idempotent in every verification mode, including facilitator mode, whose
+ * verify has no built-in replay tolerance.
+ */
+export async function detectOnChainReplay(
+	context: IExecuteFunctions,
+	block: NanoStateBlock,
+	amountRaw: string,
+	payTo: string,
+): Promise<{ replayed: boolean; matched: boolean }> {
+	try {
+		const computedHash = computeStateBlockHash(block);
+		if (!computedHash) return { replayed: false, matched: false };
+		const nanoCredentials = await context.getCredentials('x402NanoApi');
+		const nanoConfig = getNanoRpcConfig(nanoCredentials);
+		const blockInfo = await getBlockInfo(context, nanoConfig, computedHash.toString('hex'));
+		if (!blockInfo) return { replayed: false, matched: false };
+
+		const replayPayerMatches = blockInfo.account === block.account;
+		const replayAmountMatches = blockInfo.amount === amountRaw;
+		const replaySubtypeMatches = blockInfo.subtype === 'send';
+		const replayLinkMatches =
+			Boolean(blockInfo.linkAsAccount && blockInfo.linkAsAccount === payTo) ||
+			Boolean(
+				blockInfo.link &&
+					blockInfo.link.toLowerCase() === (decodePayToHex(payTo) ?? '').toLowerCase(),
+			);
+
+		return {
+			replayed: true,
+			matched:
+				replayPayerMatches &&
+				replayAmountMatches &&
+				replaySubtypeMatches &&
+				replayLinkMatches,
+		};
+	} catch {
+		return { replayed: false, matched: false };
+	}
+}
+
+export interface SettlePaymentInput {
+	signatureValue: string;
+	payTo: string;
+	amountNano: string;
+	mode: 'facilitator' | 'local';
+}
+
+export async function runPaymentSettlement(
+	context: IExecuteFunctions,
+	input: SettlePaymentInput,
+): Promise<IDataObject> {
+	const { signatureValue, payTo, amountNano, mode } = input;
 
 	if (!isValidNanoAmount(amountNano)) {
 		throw new NodeOperationError(
@@ -801,6 +851,20 @@ async function handleSettlePayment(context: IExecuteFunctions, i: number): Promi
 		amountRaw,
 		amountNano: rawToNano(amountRaw),
 	};
+}
+
+async function handleSettlePayment(context: IExecuteFunctions, i: number): Promise<IDataObject> {
+	const signatureValue = context.getNodeParameter('paymentSignature', i) as string;
+	const payTo = context.getNodeParameter('payTo', i) as string;
+	const amountNano = context.getNodeParameter('amount', i) as string;
+	const mode = context.getNodeParameter('settleMode', i, 'facilitator') as string;
+
+	return runPaymentSettlement(context, {
+		signatureValue,
+		payTo,
+		amountNano,
+		mode: mode as 'facilitator' | 'local',
+	});
 }
 
 async function handleReceivePending(context: IExecuteFunctions, i: number): Promise<IDataObject> {
@@ -958,27 +1022,31 @@ async function handleBuild402Response(context: IExecuteFunctions, i: number): Pr
 	});
 }
 
-async function handleBuildPaymentResponse(context: IExecuteFunctions, i: number): Promise<IDataObject> {
-	const protocol = context.getNodeParameter('responseProtocol', i, 'both') as string;
-	const success = context.getNodeParameter('responseSuccess', i, true) as boolean;
-	const transaction = context.getNodeParameter('responseTransaction', i, '') as string;
-	const payer = context.getNodeParameter('responsePayer', i, '') as string;
-	const paymentId = context.getNodeParameter('responsePaymentId', i, '') as string;
+export interface PaymentResponseEnvelopeParams {
+	protocol: 'v1' | 'v2' | 'both';
+	success: boolean;
+	transaction?: string;
+	payer?: string;
+	paymentId?: string;
+}
 
+export function buildPaymentResponseEnvelope(
+	params: PaymentResponseEnvelopeParams,
+): IDataObject {
 	const settlement: NormalizedSettlement = {
-		success,
-		...(transaction ? { transaction } : {}),
+		success: params.success,
+		...(params.transaction ? { transaction: params.transaction } : {}),
 		network: NANO_NETWORK,
-		...(payer ? { payer } : {}),
-		...(paymentId ? { paymentId } : {}),
+		...(params.payer ? { payer: params.payer } : {}),
+		...(params.paymentId ? { paymentId: params.paymentId } : {}),
 	};
 
 	const headers: Record<string, string> = {};
-	if (protocol === 'v2' || protocol === 'both') {
+	if (params.protocol === 'v2' || params.protocol === 'both') {
 		const header = encodeSettlementHeader(2, settlement);
 		headers[header.name] = header.value;
 	}
-	if (protocol === 'v1' || protocol === 'both') {
+	if (params.protocol === 'v1' || params.protocol === 'both') {
 		const header = encodeSettlementHeader(1, settlement);
 		headers[header.name] = header.value;
 	}
@@ -988,6 +1056,22 @@ async function handleBuildPaymentResponse(context: IExecuteFunctions, i: number)
 		headers,
 		body: {},
 	};
+}
+
+async function handleBuildPaymentResponse(context: IExecuteFunctions, i: number): Promise<IDataObject> {
+	const protocol = context.getNodeParameter('responseProtocol', i, 'both') as string;
+	const success = context.getNodeParameter('responseSuccess', i, true) as boolean;
+	const transaction = context.getNodeParameter('responseTransaction', i, '') as string;
+	const payer = context.getNodeParameter('responsePayer', i, '') as string;
+	const paymentId = context.getNodeParameter('responsePaymentId', i, '') as string;
+
+	return buildPaymentResponseEnvelope({
+		protocol: protocol as 'v1' | 'v2' | 'both',
+		success,
+		transaction,
+		payer,
+		paymentId,
+	});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

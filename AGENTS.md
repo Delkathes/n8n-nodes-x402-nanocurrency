@@ -26,6 +26,18 @@ payment requirements, and the client retries the request with a signed payment
     (not the 64-zero previous hash); an optional representative parameter
     applies to open blocks only. Receive blocks use receive-tier work
     difficulty with a base-difficulty fallback.
+- **X402 Nano Paywall** (`nodes/X402Nano/X402NanoPaywall.node.ts`,
+  `handlers/paywall-handler.ts`) — drop-in seller node placed after a built-in
+  Webhook node. One pass per request: no usable payment header -> output 0
+  with a ready 402 envelope (`buildPaymentRequiredResponse`); valid payment ->
+  verify then settle (`runPaymentSettlement`) -> output 1 with a ready 200
+  envelope (`buildPaymentResponseEnvelope`); invalid -> 402 UNLESS the block is
+  already on-chain and paid exactly these requirements (`detectOnChainReplay`),
+  in which case it is answered idempotently on output 1 (`replayed: true`)
+  without settling again. `autoSettle: false` emits the verified, unsettled
+  payment on output 1 for later manual settlement. A failed settle raises a
+  node error (never a 402) so the client retries the same signature.
+  `usableAsTool: false` — it answers webhook requests.
 - **X402 Nano Classify** (`nodes/X402Nano/X402NanoClassify.node.ts`) — resource
   server (seller): transform node with two labeled outputs (Unpaid request /
   Paid request) placed after a built-in Webhook node. Classifies requests

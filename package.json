@@ -1,72 +1,73 @@
 {
-	"name": "n8n-nodes-x402-nanocurrency",
-	"version": "0.4.2",
-	"description": "n8n community node for the x402 payment protocol with Nano (XNO): paywall triggers and payment flows for AI APIs and HTTP resources",
-	"license": "MIT",
-	"homepage": "https://github.com/Delkathes/n8n-nodes-x402-nanocurrency",
-	"keywords": [
-		"n8n-community-node-package",
-		"n8n",
-		"x402",
-		"nano",
-		"nanocurrency",
-		"payments",
-		"cryptocurrency",
-		"web3",
-		"ai"
-	],
-	"author": {
-		"name": "Delkathes",
-		"email": "iamt.lessd@gmail.com"
-	},
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/Delkathes/n8n-nodes-x402-nanocurrency.git"
-	},
-	"scripts": {
-		"build": "n8n-node build",
-		"build:watch": "tsc --watch",
-		"dev": "n8n-node dev",
-		"lint": "n8n-node lint",
-		"lint:fix": "n8n-node lint --fix",
-		"test": "vitest run",
-		"test:watch": "vitest",
-		"release": "release-it",
-		"prepublishOnly": "n8n-node prerelease"
-	},
-	"files": [
-		"dist"
-	],
-	"n8n": {
-		"n8nNodesApiVersion": 1,
-		"strict": true,
-		"credentials": [
-			"dist/credentials/X402FacilitatorApi.credentials.js",
-			"dist/credentials/X402NanoApi.credentials.js"
-		],
-		"nodes": [
-			"dist/nodes/X402Nano/X402Nano.node.js",
-			"dist/nodes/X402Nano/X402NanoClassify.node.js"
-		]
-	},
-	"dependencies": {},
-	"devDependencies": {
-		"@n8n/node-cli": "0.45.6",
-		"@release-it/conventional-changelog": "^12.0.0",
-		"eslint": "9.39.4",
-		"prettier": "3.9.6",
-		"release-it": "20.1.0",
-		"typescript": "5.9.3",
-		"vitest": "^4.1.11"
-	},
-	"peerDependencies": {
-		"n8n-workflow": "*"
-	},
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"eslint-plugin-n8n-nodes-base",
-			"isolated-vm",
-			"unrs-resolver"
-		]
-	}
+  "name": "n8n-nodes-x402-nanocurrency",
+  "version": "0.4.2",
+  "description": "n8n community node for the x402 payment protocol with Nano (XNO): paywall triggers and payment flows for AI APIs and HTTP resources",
+  "license": "MIT",
+  "homepage": "https://github.com/Delkathes/n8n-nodes-x402-nanocurrency",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "x402",
+    "nano",
+    "nanocurrency",
+    "payments",
+    "cryptocurrency",
+    "web3",
+    "ai"
+  ],
+  "author": {
+    "name": "Delkathes",
+    "email": "iamt.lessd@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Delkathes/n8n-nodes-x402-nanocurrency.git"
+  },
+  "scripts": {
+    "build": "n8n-node build",
+    "build:watch": "tsc --watch",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "release": "release-it",
+    "prepublishOnly": "n8n-node prerelease"
+  },
+  "files": [
+    "dist"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/credentials/X402FacilitatorApi.credentials.js",
+      "dist/credentials/X402NanoApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/X402Nano/X402Nano.node.js",
+      "dist/nodes/X402Nano/X402NanoClassify.node.js",
+      "dist/nodes/X402Nano/X402NanoPaywall.node.js"
+    ]
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@n8n/node-cli": "0.45.6",
+    "@release-it/conventional-changelog": "^12.0.0",
+    "eslint": "9.39.4",
+    "prettier": "3.9.6",
+    "release-it": "20.1.0",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "eslint-plugin-n8n-nodes-base",
+      "isolated-vm",
+      "unrs-resolver"
+    ]
+  }
 }
