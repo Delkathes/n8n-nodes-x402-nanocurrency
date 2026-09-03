@@ -89,8 +89,10 @@ export class X402NanoTrigger implements INodeType {
 
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
 		// The default webhook item ({ headers, params, query, body }) is passed
-		// to the workflow. The workflow responds via a Respond to Webhook node
-		// (402 + PAYMENT-REQUIRED, or 200 + PAYMENT-RESPONSE).
-		return { webhookResponse: 'default' };
+		// to the workflow. The webhooks are configured with
+		// responseMode: 'responseNode', so the response must be left to a
+		// Respond to Webhook node: return noWebhookResponse so n8n waits for it
+		// instead of answering immediately with the default response.
+		return { noWebhookResponse: true };
 	}
 }
