@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.4](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.3...0.3.4) (2026-09-03)
+
+### Bug Fixes
+
+* X402 Nano Trigger webhook path (n8n does not resolve {{}}) ([cd44d63](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/cd44d63e3e5304daaa56371daba88d5c5a7686dc))
+
 ## [0.3.3](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.2...0.3.3) (2026-09-03)
 
 ### Bug Fixes
