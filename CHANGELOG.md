@@ -1,5 +1,11 @@
 # Changelog
 
+# [0.4.0](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.5...0.4.0) (2026-09-03)
+
+### Features
+
+* X402 Nano Trigger v2 - classified paywall webhook with two outputs ([c6bb03a](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/c6bb03a55e867922e68cd112e5834cef1416a81b))
+
 ## [0.3.5](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.4...0.3.5) (2026-09-03)
 
 ### Bug Fixes
