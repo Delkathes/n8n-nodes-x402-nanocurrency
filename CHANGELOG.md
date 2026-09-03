@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.5](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.4...0.3.5) (2026-09-03)
+
+### Bug Fixes
+
+* X402 Nano Trigger must not answer webhooks itself ([7c97008](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/7c97008a00ffa2bbb4938b068b732984f35d7817))
+
 ## [0.3.4](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.3...0.3.4) (2026-09-03)
 
 ### Bug Fixes
