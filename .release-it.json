@@ -1,5 +1,4 @@
 {
-  "ci": true,
   "plugins": {
     "@release-it/conventional-changelog": {
       "preset": "angular",
