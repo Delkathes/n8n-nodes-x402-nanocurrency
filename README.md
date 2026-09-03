@@ -23,7 +23,21 @@ An n8n community node package for the **x402 payment protocol** with **Nano (XNO
 ### `X402 Nano Trigger` node (resource server — seller)
 
 A webhook that turns any n8n workflow into a paid endpoint (listens on GET and
-POST). The `Path` parameter controls the webhook URL:
+POST). Two node versions are shipped:
+
+- **v2 (recommended)** — classifies every request into two labeled outputs:
+  - **`Unpaid request`** — no v1/v2 payment header (probe requests; GET
+    doubles as a browser probe and lands here → answer 402)
+  - **`Paid request`** — a payment header is present. The item carries
+    `payment: { hasPayment, protocol ('v2'|'v1'), headerName, headerValue,
+    headerInvalid }` plus normalized lowercase `headers`. When
+    `headerInvalid` is `true` the client sent an unusable payment header
+    (empty or non-base64) — answer a distinct 402 rather than re-offering.
+    Classification only; content verification stays in Verify Payment.
+- **v1** — passthrough: every request (headers, params, query, body) on a
+  single output; the workflow decides how to answer.
+
+The `Path` parameter controls the webhook URL (same for both versions):
 
 - **empty** (default) → unique URL per instance: `…/webhook/<webhookId>` — the
   same behavior as the built-in Webhook node, so several paywall workflows can

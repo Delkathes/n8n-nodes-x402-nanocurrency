@@ -27,13 +27,21 @@ payment requirements, and the client retries the request with a signed payment
     applies to open blocks only. Receive blocks use receive-tier work
     difficulty with a base-difficulty fallback.
 - **X402 Nano Trigger** (`nodes/X402Nano/X402NanoTrigger.node.ts`) — resource
-  server (seller): webhook that passes requests to the workflow, which answers
-  with 402 + `PAYMENT-REQUIRED` or 200 + `PAYMENT-RESPONSE` via a
-  Respond to Webhook node. Webhook entries use `isFullPath: true` and
+  server (seller): two typeVersions in the same file. v1 is a passthrough
+  webhook (single output). v2 has two labeled outputs (Unpaid request / Paid
+  request) and classifies requests natively via
+  `utils/paywall-classifier.ts` (`classifyPaywallRequest`): normalized
+  lowercase headers + `payment` object (`hasPayment`, `protocol`, `headerName`,
+  `headerValue`, `headerInvalid`). Classification only — no payload decoding
+  (Verify Payment's job). Webhook entries use `isFullPath: true` and
   `path: ={{$parameter.path}}` — n8n does NOT resolve `{{$webhookId}}`
   placeholders in paths (verified against n8n 2.36 source), so the node's
   `path` parameter (default empty → unique webhook-ID URL) is the only way to
-  control the URL. Keep the path parameterized; never hardcode the placeholder.
+  control the URL. `webhook()` MUST return
+  `{ noWebhookResponse: true, workflowData: [[items]] }` — `workflowData`
+  starts the execution (missing it hangs the request: verified against
+  webhook-helpers.js in n8n 2.36); both output arrays must always be emitted
+  even when empty. `webhookMethods` needs a symmetric entry per webhook name.
 
 ## Hard rules
 
