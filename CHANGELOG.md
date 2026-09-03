@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.2](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.4.0...0.4.2) (2026-09-03)
+
+### Bug Fixes
+
+* classify node usableAsTool must be true (type disallows false) ([16af9ef](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/16af9ef91804c19a95c99effced19e825d01a611))
+
 # [0.4.0](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.5...0.4.0) (2026-09-03)
 
 ### Features
