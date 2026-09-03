@@ -36,6 +36,7 @@ import {
 import {
 	EXACT_SCHEME,
 	NANO_NETWORK,
+	HEADER_V1_PAYMENT,
 	HEADER_V2_PAYMENT_REQUIRED,
 	buildPaymentPayloadV1,
 	buildPaymentPayloadV2,
@@ -389,6 +390,45 @@ async function handleProbe(context: IExecuteFunctions, i: number): Promise<IData
 			...accept,
 			amountNano: rawToNano(accept.amountRaw),
 		})),
+	};
+}
+
+/**
+ * Send a request with an existing payment header (built by the
+ * Build Payment Signature operation) and return the paid response.
+ * Completes the manual payment flow: probe -> build signature ->
+ * send with payment header -> settle (optionally) -> content.
+ */
+async function handleSendWithPayment(
+	context: IExecuteFunctions,
+	i: number,
+): Promise<IDataObject> {
+	const spec = readRequestSpec(context, i);
+	const headerName = context.getNodeParameter('paymentHeaderName', i, 'PAYMENT-SIGNATURE') as string;
+	const headerValue = context.getNodeParameter('paymentHeaderValue', i) as string;
+	if (!headerValue || headerValue.trim().length === 0) {
+		throw new NodeOperationError(
+			context.getNode(),
+			'Payment header value is required (use Build Payment Signature to create it)',
+		);
+	}
+
+	const version: X402Version = headerName === HEADER_V1_PAYMENT ? 1 : 2;
+	const response = await httpRaw(context, buildHttpOptions(spec, { [headerName]: headerValue }));
+	const settlement = parseSettlementFromHeaders(response.headers, version);
+	const result = normalizeHttpResponse(response);
+
+	return {
+		...result,
+		payment: {
+			protocolVersion: version,
+			success: settlement ? settlement.success : (response.statusCode ?? 0) < 400,
+			...(settlement?.transaction ? { transaction: settlement.transaction } : {}),
+			...(settlement?.network ? { network: settlement.network } : {}),
+			...(settlement?.payer ? { payer: settlement.payer } : {}),
+			...(settlement?.errorReason ? { errorReason: settlement.errorReason } : {}),
+			...(settlement ? { settlement } : {}),
+		},
 	};
 }
 
@@ -840,6 +880,7 @@ async function handleBuild402Response(context: IExecuteFunctions, i: number): Pr
 	const mimeType = context.getNodeParameter('mimeType', i, 'application/json') as string;
 	const tags = context.getNodeParameter('tags', i, '') as string;
 	const errorMessage = context.getNodeParameter('errorMessage', i, '') as string;
+	const maxTimeoutSeconds = context.getNodeParameter('maxTimeoutSeconds', i, 0) as number;
 
 	if (!isValidNanoAmount(amountNano)) {
 		throw new NodeOperationError(
@@ -868,6 +909,7 @@ async function handleBuild402Response(context: IExecuteFunctions, i: number): Pr
 		resource,
 		...(paymentId ? { paymentId } : {}),
 		...(errorMessage ? { error: errorMessage } : {}),
+		...(maxTimeoutSeconds && maxTimeoutSeconds > 0 ? { maxTimeoutSeconds } : {}),
 	});
 }
 
@@ -919,6 +961,9 @@ export async function dispatchX402Operation(params: {
 		if (resource === 'request') {
 			if (operation === 'pay') {
 				return await handlePay(context, i);
+			}
+			if (operation === 'sendWithPayment') {
+				return await handleSendWithPayment(context, i);
 			}
 			return await handleProbe(context, i);
 		}
@@ -975,6 +1020,7 @@ export function buildPaymentRequiredResponse(params: {
 	resource?: ResourceInfo;
 	paymentId?: string;
 	error?: string;
+	maxTimeoutSeconds?: number;
 }): IDataObject {
 	const amountRaw = nanoToRaw(params.amountNano);
 	const extra: Record<string, unknown> = params.paymentId ? { paymentId: params.paymentId } : {};
@@ -986,6 +1032,9 @@ export function buildPaymentRequiredResponse(params: {
 		payTo: params.payTo,
 		asset: 'XNO',
 		extra,
+		...(params.maxTimeoutSeconds !== undefined && params.maxTimeoutSeconds > 0
+			? { maxTimeoutSeconds: params.maxTimeoutSeconds }
+			: {}),
 	};
 
 	const acceptV2: AcceptV2 = {
@@ -995,6 +1044,9 @@ export function buildPaymentRequiredResponse(params: {
 		payTo: params.payTo,
 		asset: 'XNO',
 		extra,
+		...(params.maxTimeoutSeconds !== undefined && params.maxTimeoutSeconds > 0
+			? { maxTimeoutSeconds: params.maxTimeoutSeconds }
+			: {}),
 	};
 
 	const response: IDataObject = {

@@ -42,6 +42,12 @@ export class X402NanoTrigger implements INodeType {
 				responseMode: 'responseNode',
 				path: 'x402/{{$webhookId}}',
 			},
+			{
+				name: 'setup',
+				httpMethod: 'GET',
+				responseMode: 'responseNode',
+				path: 'x402/{{$webhookId}}',
+			},
 		],
 		properties: [
 			{

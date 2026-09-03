@@ -9,6 +9,7 @@ An n8n community node package for the **x402 payment protocol** with **Nano (XNO
 | Resource | Operation | Description |
 | --- | --- | --- |
 | Request | Pay | Wrap any HTTP request: probe, pay the 402 with Nano, retry, return the paid response + settlement metadata |
+| Request | Send with Payment Header | Send a request with an existing `X-PAYMENT`/`PAYMENT-SIGNATURE` header (from Build Payment Signature) and return the paid response |
 | Request | Probe | Send a request without paying and get the payment requirements (price, payTo, resource) |
 | Payment | Build Payment Signature | Create an `X-PAYMENT` (v1) or `PAYMENT-SIGNATURE` (v2) header from a payTo address + amount |
 | Payment | Verify Payment | Verify a payment payload against the expected requirements (facilitator or local Nano RPC). Local mode checks signature, payTo, proof of work, payer frontier + confirmation and replay; best-effort — settlement remains the authoritative gate |
@@ -16,14 +17,14 @@ An n8n community node package for the **x402 payment protocol** with **Nano (XNO
 | Payment | Receive Pending | Receive all confirmed pending sends on the configured account by broadcasting open/receive blocks (use after local settlement to move funds out of the pending state) |
 | Payment | Get Supported | List the facilitator's supported payment kinds |
 | Payment | Probe Upstream Price | Call a paywalled upstream URL, parse its v1/v2 requirements, apply a markup percentage |
-| Response | Build 402 Payment Required | Build the 402 headers + body for a paywall webhook (v1, v2 or both) |
+| Response | Build 402 Payment Required | Build the 402 headers + body for a paywall webhook (v1, v2 or both, optional maxTimeoutSeconds) |
 | Response | Build Payment Response | Build the settlement response headers for a paid request |
 
 ### `X402 Nano Trigger` node (resource server — seller)
 
-A webhook that turns any n8n workflow into a paid endpoint. Each trigger instance
-gets a unique webhook path (`/x402/<webhookId>`), so several paywall workflows
-can run on the same n8n instance:
+A webhook that turns any n8n workflow into a paid endpoint (listens on GET and
+POST). Each trigger instance gets a unique webhook path (`/x402/<webhookId>`),
+so several paywall workflows can run on the same n8n instance:
 
 ```
 X402 Nano Trigger (request with or without payment)

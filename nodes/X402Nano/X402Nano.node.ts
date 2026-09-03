@@ -87,6 +87,12 @@ export class X402Nano implements INodeType {
 						action: 'Pay request with nano',
 					},
 					{
+						name: 'Send with Payment Header',
+						value: 'sendWithPayment',
+						description: 'Send a request with an existing x402 payment header and get the paid response',
+						action: 'Send request with payment header',
+					},
+					{
 						name: 'Probe',
 						value: 'probe',
 						description: 'Send a request without paying to discover the payment requirements',
@@ -181,7 +187,7 @@ export class X402Nano implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['request'],
-						operation: ['pay', 'probe'],
+						operation: ['pay', 'probe', 'sendWithPayment'],
 					},
 				},
 				default: '',
@@ -209,7 +215,7 @@ export class X402Nano implements INodeType {
 				type: 'options',
 				displayOptions: {
 					show: {
-						operation: ['pay', 'probe', 'probeUpstreamPrice'],
+						operation: ['pay', 'probe', 'probeUpstreamPrice', 'sendWithPayment'],
 					},
 				},
 				options: [
@@ -250,7 +256,7 @@ export class X402Nano implements INodeType {
 				type: 'json',
 				displayOptions: {
 					show: {
-						operation: ['pay', 'probe', 'probeUpstreamPrice'],
+						operation: ['pay', 'probe', 'probeUpstreamPrice', 'sendWithPayment'],
 					},
 				},
 				default: '{}',
@@ -263,7 +269,7 @@ export class X402Nano implements INodeType {
 				type: 'options',
 				displayOptions: {
 					show: {
-						operation: ['pay', 'probe', 'probeUpstreamPrice'],
+						operation: ['pay', 'probe', 'probeUpstreamPrice', 'sendWithPayment'],
 					},
 				},
 				options: [
@@ -280,7 +286,7 @@ export class X402Nano implements INodeType {
 				type: 'json',
 				displayOptions: {
 					show: {
-						operation: ['pay', 'probe', 'probeUpstreamPrice'],
+						operation: ['pay', 'probe', 'probeUpstreamPrice', 'sendWithPayment'],
 						bodyType: ['json'],
 					},
 				},
@@ -293,7 +299,7 @@ export class X402Nano implements INodeType {
 				type: 'string',
 				displayOptions: {
 					show: {
-						operation: ['pay', 'probe', 'probeUpstreamPrice'],
+						operation: ['pay', 'probe', 'probeUpstreamPrice', 'sendWithPayment'],
 						bodyType: ['raw'],
 					},
 				},
@@ -306,7 +312,7 @@ export class X402Nano implements INodeType {
 				type: 'string',
 				displayOptions: {
 					show: {
-						operation: ['pay', 'probe', 'probeUpstreamPrice'],
+						operation: ['pay', 'probe', 'probeUpstreamPrice', 'sendWithPayment'],
 						bodyType: ['raw'],
 					},
 				},
@@ -319,7 +325,7 @@ export class X402Nano implements INodeType {
 				type: 'number',
 				displayOptions: {
 					show: {
-						operation: ['pay', 'probe', 'probeUpstreamPrice'],
+						operation: ['pay', 'probe', 'probeUpstreamPrice', 'sendWithPayment'],
 					},
 				},
 				default: 30000,
@@ -327,6 +333,35 @@ export class X402Nano implements INodeType {
 					minValue: 1,
 				},
 				description: 'Request timeout in milliseconds',
+			},
+			{
+				displayName: 'Payment Header Name',
+				name: 'paymentHeaderName',
+				type: 'options',
+				displayOptions: {
+					show: {
+						operation: ['sendWithPayment'],
+					},
+				},
+				options: [
+					{ name: 'Payment Signature (V2)', value: 'PAYMENT-SIGNATURE' },
+					{ name: 'X-Payment (V1)', value: 'X-PAYMENT' },
+				],
+				default: 'PAYMENT-SIGNATURE',
+				description: 'Which payment header to attach to the request',
+			},
+			{
+				displayName: 'Payment Header Value',
+				name: 'paymentHeaderValue',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['sendWithPayment'],
+					},
+				},
+				default: '',
+				description: 'Raw value of the PAYMENT-SIGNATURE (v2) or X-PAYMENT (v1) header, e.g. from the Build Payment Signature operation',
 			},
 			{
 				displayName: 'Pay Automatically',
@@ -675,6 +710,22 @@ export class X402Nano implements INodeType {
 				},
 				default: '',
 				description: 'Error text shown to the client alongside the payment requirements. Defaults to "Payment Required".',
+			},
+			{
+				displayName: 'Max Timeout Seconds',
+				name: 'maxTimeoutSeconds',
+				type: 'number',
+				displayOptions: {
+					show: {
+						resource: ['response'],
+						operation: ['build402Response'],
+					},
+				},
+				default: 0,
+				typeOptions: {
+					minValue: 0,
+				},
+				description: 'Maximum time (seconds) the payment requirements stay valid. 0 omits the field, leaving the timeout open-ended.',
 			},
 			{
 				displayName: 'Protocol',
