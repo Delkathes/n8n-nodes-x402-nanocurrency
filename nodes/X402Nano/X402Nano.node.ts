@@ -391,6 +391,20 @@ export class X402Nano implements INodeType {
 					'Paying or receiving account when signing with the node wallet. Overrides the credential source account. Ignored when a private key is configured.',
 			},
 			{
+				displayName: 'Representative',
+				name: 'representative',
+				type: 'string',
+				displayOptions: {
+					show: {
+						operation: ['receivePending'],
+					},
+				},
+				default: '',
+				placeholder: 'nano_1abc...',
+				description:
+					'Representative used when opening an unopened account (open block). Leave empty to represent yourself. Ignored once the account is opened.',
+			},
+			{
 				displayName: 'Work Value',
 				name: 'work',
 				type: 'string',
@@ -566,7 +580,7 @@ export class X402Nano implements INodeType {
 						name: 'Local (Nano RPC)',
 						value: 'local',
 						description:
-							'Verify locally against your Nano node: signature, payTo, proof of work, payer frontier and confirmation, plus replay detection. Best-effort — settling the block remains the authoritative gate.',
+							'Verify locally against your Nano node: signature, payTo, proof of work, payer frontier and confirmation, plus replay detection. Replayed payments that match the requirements are treated as valid (idempotent), so client retries never double-charge. Best-effort — settling the block remains the authoritative gate.',
 					},
 				],
 				default: 'facilitator',

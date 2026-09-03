@@ -12,7 +12,7 @@ An n8n community node package for the **x402 payment protocol** with **Nano (XNO
 | Request | Send with Payment Header | Send a request with an existing `X-PAYMENT`/`PAYMENT-SIGNATURE` header (from Build Payment Signature) and return the paid response |
 | Request | Probe | Send a request without paying and get the payment requirements (price, payTo, resource) |
 | Payment | Build Payment Signature | Create an `X-PAYMENT` (v1) or `PAYMENT-SIGNATURE` (v2) header from a payTo address + amount |
-| Payment | Verify Payment | Verify a payment payload against the expected requirements (facilitator or local Nano RPC). Local mode checks signature, payTo, proof of work, payer frontier + confirmation and replay; best-effort — settlement remains the authoritative gate |
+| Payment | Verify Payment | Verify a payment payload against the expected requirements (facilitator or local Nano RPC). Local mode checks signature, payTo, proof of work, payer frontier + confirmation and replay; replayed payments matching the requirements are valid (idempotent), so client retries never double-charge. Best-effort — settlement remains the authoritative gate |
 | Payment | Settle Payment | Settle a verified payment block and get the transaction hash (facilitator or local Nano RPC) |
 | Payment | Receive Pending | Receive all confirmed pending sends on the configured account by broadcasting open/receive blocks (use after local settlement to move funds out of the pending state) |
 | Payment | Get Supported | List the facilitator's supported payment kinds |

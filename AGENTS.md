@@ -12,11 +12,17 @@ payment requirements, and the client retries the request with a signed payment
 - **X402 Nano** (`nodes/X402Nano/X402Nano.node.ts`) — client (payer): Pay,
   Probe, Build Payment Signature, Verify/Settle/Receive Pending/Supported
   (facilitator or local Nano RPC), Probe Upstream Price.
-  - Local Verify Payment is best-effort: signature, payTo, work_validate,
-    payer frontier + confirmed frontier, replay detection (block_info).
+  - Local Verify Payment is best-effort: signature, payTo, work_validate
+    (valid_all/valid_receive/valid), payer frontier + confirmed frontier,
+    replay detection (block_info). Replayed payments that match the
+    requirements (payer, amount, payTo) count as valid — idempotent, so
+    client retries after a processed payment do not double-charge.
     Settlement (process) is the authoritative gate.
   - Receive Pending broadcasts open/receive blocks for confirmed pending
     sends (local-mode sellers must call it to move funds out of pending).
+    Open-block proof of work is generated over the account public key
+    (not the 64-zero previous hash); an optional representative parameter
+    applies to open blocks only.
 - **X402 Nano Trigger** (`nodes/X402Nano/X402NanoTrigger.node.ts`) — resource
   server (seller): webhook that passes requests to the workflow, which answers
   with 402 + `PAYMENT-REQUIRED` or 200 + `PAYMENT-RESPONSE` via a

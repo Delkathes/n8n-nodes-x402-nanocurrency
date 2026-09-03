@@ -7,7 +7,7 @@ import {
 	verifyEd25519Blake2b,
 } from '../utils/ed25519-blake2b';
 import { decodeNanoAddress, encodeNanoAddress } from '../utils/nano-address';
-import { buildSendBlock, buildReceiveBlock, signBlock, verifyBlock, OPEN_BLOCK_PREVIOUS } from '../utils/block';
+import { buildSendBlock, buildReceiveBlock, signBlock, verifyBlock, OPEN_BLOCK_PREVIOUS, resolveReceiveWorkRoot } from '../utils/block';
 import type { NanoStateBlock } from '../utils/block';
 
 // Real mainnet fixtures (fetched from a public Nano RPC node).
@@ -276,5 +276,29 @@ describe('receive blocks', () => {
 				amountRaw: '1',
 			}),
 		).toBeNull();
+	});
+});
+
+describe('receive work root', () => {
+	it('uses the frontier as the work root for a normal receive', () => {
+		const accountPublicKey = derivePublicKey(TEST_PRIVATE_KEY);
+		const account = encodeNanoAddress(accountPublicKey) as string;
+
+		const root = resolveReceiveWorkRoot(account, 'a'.repeat(64));
+		expect(root).toBe('A'.repeat(64));
+	});
+
+	it('uses the account public key as the work root for an open block', () => {
+		const accountPublicKey = derivePublicKey(TEST_PRIVATE_KEY);
+		const account = encodeNanoAddress(accountPublicKey) as string;
+
+		const root = resolveReceiveWorkRoot(account, '');
+		expect(root).toBe(accountPublicKey.toString('hex').toUpperCase());
+		expect(root).not.toBe(OPEN_BLOCK_PREVIOUS);
+	});
+
+	it('returns null for invalid account or frontier', () => {
+		expect(resolveReceiveWorkRoot('not-an-account', '')).toBeNull();
+		expect(resolveReceiveWorkRoot(encodeNanoAddress(derivePublicKey(TEST_PRIVATE_KEY)) as string, 'xyz')).toBeNull();
 	});
 });

@@ -119,6 +119,25 @@ export async function getPendingBlocks(
 	}));
 }
 
+/**
+ * Parse a work_validate RPC response.
+ * Nano V27+ answers with `valid_all` / `valid_receive`; older nodes answer
+ * with `valid`. All of them use "1" for valid and "0" for invalid.
+ */
+export function parseWorkValidation(data: Record<string, unknown>): boolean {
+	const validAll = String(data.valid_all ?? '');
+	const validReceive = String(data.valid_receive ?? '');
+	const valid = String(data.valid ?? '');
+	return (
+		validAll === '1' ||
+		validAll === 'true' ||
+		validReceive === '1' ||
+		validReceive === 'true' ||
+		valid === '1' ||
+		valid === 'true'
+	);
+}
+
 /** Validate proof of work against a root hash (the account frontier). */
 export async function validateWork(
 	context: IExecuteFunctions,
@@ -127,16 +146,28 @@ export async function validateWork(
 	work: string,
 ): Promise<boolean> {
 	const data = await nanoRpcCall(context, config, 'work_validate', { hash, work });
-	const valid = String(data.valid ?? 'false').toLowerCase();
-	return valid === 'true' || valid === '1';
+	return parseWorkValidation(data);
 }
 
-/** Check whether a block hash exists on the network (replay detection). */
-export async function blockExists(
+export interface NanoBlockInfo {
+	hash: string;
+	account: string;
+	amount?: string;
+	subtype?: string;
+	confirmed?: boolean;
+	link?: string;
+	linkAsAccount?: string;
+}
+
+/**
+ * Fetch details about a block by hash. Returns null when the block does not
+ * exist (unknown hash). Used for replay detection and replay matching.
+ */
+export async function getBlockInfo(
 	context: IExecuteFunctions,
 	config: NanoRpcConfig,
 	hash: string,
-): Promise<boolean> {
+): Promise<NanoBlockInfo | null> {
 	const response = await context.helpers.httpRequestWithAuthentication.call(
 		context,
 		'x402NanoApi',
@@ -149,9 +180,31 @@ export async function blockExists(
 		},
 	);
 	if (response?.error) {
-		return false;
+		return null;
 	}
-	return typeof (response as Record<string, unknown>).block_account === 'string';
+
+	const data = response as Record<string, unknown>;
+	if (typeof data.block_account !== 'string') {
+		return null;
+	}
+
+	const contentsRaw = data.contents as Record<string, unknown> | string | undefined;
+	const contents =
+		typeof contentsRaw === 'string' ? (JSON.parse(contentsRaw) as Record<string, unknown>) : contentsRaw;
+
+	return {
+		hash,
+		account: data.block_account,
+		...(typeof data.amount === 'string' ? { amount: data.amount } : {}),
+		...(typeof data.subtype === 'string' ? { subtype: data.subtype } : {}),
+		...(typeof data.confirmed === 'string'
+			? { confirmed: data.confirmed.toLowerCase() === 'true' }
+			: {}),
+		...(contents && typeof contents.link === 'string' ? { link: contents.link } : {}),
+		...(contents && typeof contents.link_as_account === 'string'
+			? { linkAsAccount: contents.link_as_account }
+			: {}),
+	};
 }
 
 /** Generate proof of work for a block hash (previous/frontier). */

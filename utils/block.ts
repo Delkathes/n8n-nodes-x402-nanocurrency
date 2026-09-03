@@ -60,6 +60,28 @@ export interface ReceiveBlockParams {
 
 export const OPEN_BLOCK_PREVIOUS = '0'.repeat(64);
 
+/**
+ * Resolve the proof-of-work root hash for a receive block.
+ * For a normal receive the root is the account frontier; for an open block
+ * (account never opened) Nano requires the work to be generated over the
+ * account's public key instead of the 64-zero previous hash.
+ */
+export function resolveReceiveWorkRoot(account: string, frontier?: string): string | null {
+	const trimmed = (frontier ?? '').trim();
+	if (trimmed.length > 0) {
+		const bytes = hexToBytes(trimmed);
+		if (!bytes || bytes.length !== 32) {
+			return null;
+		}
+		return trimmed.toUpperCase();
+	}
+	const key = decodeNanoAddress(account);
+	if (!key) {
+		return null;
+	}
+	return key.toString('hex').toUpperCase();
+}
+
 function hexToBytes(hex: string): Buffer | null {
 	if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
 		return null;

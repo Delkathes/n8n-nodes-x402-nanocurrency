@@ -9,9 +9,9 @@ import {
 	buildSendBlock,
 	buildReceiveBlock,
 	computeStateBlockHash,
+	resolveReceiveWorkRoot,
 	signBlock,
 	verifyBlock,
-	OPEN_BLOCK_PREVIOUS,
 } from '../../../utils/block';
 import type { NanoStateBlock } from '../../../utils/block';
 import { isValidNanoAmount, nanoToRaw, rawToNano } from '../../../utils/conversions';
@@ -31,7 +31,7 @@ import {
 	signWithWallet,
 	getPendingBlocks,
 	validateWork,
-	blockExists,
+	getBlockInfo,
 } from '../../../utils/nano-rpc';
 import {
 	EXACT_SCHEME,
@@ -646,35 +646,52 @@ async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promi
 		workValid = false;
 	}
 
+	// Replay detection + idempotent replay matching. When the payment block is
+	// already on-chain, re-running the strict checks fails (the payer frontier
+	// has moved on). Instead of rejecting the request — which would make the
+	// client pay AGAIN with a fresh block — treat the replayed payment as valid
+	// when it demonstrably paid for these exact requirements.
 	let replayed = false;
+	let replayMatched = false;
 	if (computedHash) {
 		try {
-			replayed = await blockExists(context, nanoConfig, computedHash.toString('hex'));
+			const blockInfo = await getBlockInfo(context, nanoConfig, computedHash.toString('hex'));
+			replayed = blockInfo !== null;
+			if (blockInfo) {
+				const replayPayerMatches = blockInfo.account === block.account;
+				const replayAmountMatches = !blockInfo.amount || blockInfo.amount === amountRaw;
+				const replayLinkMatches =
+					Boolean(blockInfo.linkAsAccount && blockInfo.linkAsAccount === payTo) ||
+					Boolean(
+						blockInfo.link &&
+							blockInfo.link.toLowerCase() === (decodePayToHex(payTo) ?? '').toLowerCase(),
+					);
+				replayMatched = replayPayerMatches && replayAmountMatches && replayLinkMatches;
+			}
 		} catch {
 			replayed = false;
 		}
 	}
 
-	const isValid =
-		payToMatches &&
-		signatureValid &&
-		balanceSufficient &&
-		workValid &&
-		frontierMatches &&
-		confirmedFrontierMatches &&
-		!replayed;
+	const isValid = replayed
+		? replayMatched
+		: payToMatches &&
+			signatureValid &&
+			balanceSufficient &&
+			workValid &&
+			frontierMatches &&
+			confirmedFrontierMatches;
 	const invalidReason = !isValid
-		? [
-				!payToMatches ? 'payTo does not match the block link' : '',
-				!signatureValid ? 'block signature is invalid' : '',
-				!balanceSufficient ? 'payer balance is insufficient' : '',
-				!workValid ? 'block proof of work is invalid' : '',
-				!frontierMatches ? 'block previous does not match the payer frontier' : '',
-				!confirmedFrontierMatches ? 'payer frontier is not confirmed' : '',
-				replayed ? 'payment block was already processed (replay)' : '',
-			]
-				.filter(Boolean)
-				.join(', ')
+		? replayed
+			? ['payment block was already processed and does not match these requirements (replay)']
+			: [
+					!payToMatches ? 'payTo does not match the block link' : '',
+					!signatureValid ? 'block signature is invalid' : '',
+					!balanceSufficient ? 'payer balance is insufficient' : '',
+					!workValid ? 'block proof of work is invalid' : '',
+					!frontierMatches ? 'block previous does not match the payer frontier' : '',
+					!confirmedFrontierMatches ? 'payer frontier is not confirmed' : '',
+				].filter(Boolean).join(', ')
 		: undefined;
 
 	return {
@@ -692,6 +709,7 @@ async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promi
 			frontierMatches,
 			confirmedFrontierMatches,
 			replayed,
+			replayMatched,
 		},
 	};
 }
@@ -808,11 +826,12 @@ async function handleReceivePending(context: IExecuteFunctions, i: number): Prom
 		return { account, count: 0, received: [] };
 	}
 
+	const representativeOverride = (context.getNodeParameter('representative', i, '') as string).trim();
 	let info: { frontier: string; balance: string; representative: string };
 	try {
 		info = await getAccountInfo(context, config, account);
 	} catch {
-		info = { frontier: '', balance: '0', representative: account };
+		info = { frontier: '', balance: '0', representative: representativeOverride || account };
 	}
 
 	const received: Array<Record<string, unknown>> = [];
@@ -833,7 +852,16 @@ async function handleReceivePending(context: IExecuteFunctions, i: number): Prom
 			);
 		}
 
-		const work = await generateWork(context, config, info.frontier || OPEN_BLOCK_PREVIOUS);
+		// Open blocks need their proof of work generated over the account
+		// public key, not over the 64-zero previous hash.
+		const workRoot = resolveReceiveWorkRoot(account, info.frontier);
+		if (!workRoot) {
+			throw new NodeOperationError(
+				context.getNode(),
+				`Cannot resolve the work root for account ${account}: invalid account address or frontier`,
+			);
+		}
+		const work = await generateWork(context, config, workRoot);
 		const signature = privateKeyHex
 			? signBlock(Buffer.from(privateKeyHex, 'hex'), built.hash)
 			: await signWithWallet(context, config, walletId, account, built.hash);
