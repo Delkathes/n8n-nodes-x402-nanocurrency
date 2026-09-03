@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-x402-nanocurrency",
-	"version": "0.3.2",
+	"version": "0.3.3",
 	"description": "n8n community node for the x402 payment protocol with Nano (XNO): paywall triggers and payment flows for AI APIs and HTTP resources",
 	"license": "MIT",
 	"homepage": "https://github.com/Delkathes/n8n-nodes-x402-nanocurrency",

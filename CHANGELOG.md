@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.3](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.2...0.3.3) (2026-09-03)
+
+### Bug Fixes
+
+* Build Payment Signature (header mode) echoes the full wire accept ([d030e64](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/d030e641e9013610556cb3cef7905806ebc09d5d))
+
 ## [0.3.2](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.1...0.3.2) (2026-09-03)
 
 ### Bug Fixes
