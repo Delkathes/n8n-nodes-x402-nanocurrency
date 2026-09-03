@@ -488,6 +488,8 @@ async function handleBuildPaymentSignature(
 	let paymentId: string | undefined;
 	let version: X402Version;
 
+	let parsedAccept: NormalizedAccept | undefined;
+
 	if (mode === 'header') {
 		const headerValue = context.getNodeParameter('paymentRequiredHeader', i) as string;
 		if (!headerValue || headerValue.trim().length === 0) {
@@ -505,17 +507,17 @@ async function handleBuildPaymentSignature(
 				'The header does not contain a parseable x402 payment requirement (expected a PAYMENT-REQUIRED header value or a requirements JSON object)',
 			);
 		}
-		const accept = findExactNanoAccept(requirements.accepts);
-		if (!accept) {
+		parsedAccept = findExactNanoAccept(requirements.accepts);
+		if (!parsedAccept) {
 			throw new NodeOperationError(
 				context.getNode(),
 				'The payment requirements do not contain an exact nano:mainnet option',
 			);
 		}
 		version = requirements.version;
-		payTo = accept.payTo;
-		amountNano = rawToNano(accept.amountRaw);
-		paymentId = accept.paymentId;
+		payTo = parsedAccept.payTo;
+		amountNano = rawToNano(parsedAccept.amountRaw);
+		paymentId = parsedAccept.paymentId;
 	} else {
 		payTo = context.getNodeParameter('payTo', i) as string;
 		amountNano = context.getNodeParameter('amount', i) as string;
@@ -533,14 +535,21 @@ async function handleBuildPaymentSignature(
 		throw new NodeOperationError(context.getNode(), `Invalid payTo address: ${payTo}`);
 	}
 
-	const amountRaw = nanoToRaw(amountNano);
-	const accept: NormalizedAccept = {
-		scheme: EXACT_SCHEME,
-		network: NANO_NETWORK,
-		amountRaw,
-		payTo,
-		...(paymentId ? { paymentId } : {}),
-	};
+	// Header mode: keep the parsed wire accept (including rawAccept) so the
+	// payment payload echoes the requirements verbatim. x402 core resource
+	// servers deep-equal `accepted` against their advertised requirements and
+	// answer 402 "No matching payment requirements" when fields such as asset,
+	// maxTimeoutSeconds or extra are dropped by a reduced reconstruction.
+	const amountRaw = parsedAccept ? parsedAccept.amountRaw : nanoToRaw(amountNano);
+	const accept: NormalizedAccept =
+		parsedAccept ??
+		{
+			scheme: EXACT_SCHEME,
+			network: NANO_NETWORK,
+			amountRaw,
+			payTo,
+			...(paymentId ? { paymentId } : {}),
+		};
 
 	const payment = await executePayment(context, i, accept, version);
 	const parsedPayload = parsePaymentHeader(payment.headerValue);
