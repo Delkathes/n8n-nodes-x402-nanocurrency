@@ -1,5 +1,11 @@
 # Changelog
 
+# [0.3.0](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.2.0...0.3.0) (2026-09-03)
+
+### Features
+
+* send with payment header operation, GET trigger webhook, maxTimeoutSeconds param ([ad45507](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/ad455070dbf31431609cee1951817804f16b8e56))
+
 # 0.2.0 (2026-09-03)
 
 ### Bug Fixes
