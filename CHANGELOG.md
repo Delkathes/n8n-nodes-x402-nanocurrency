@@ -1,5 +1,11 @@
 # Changelog
 
+# [0.5.0](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.4.2...0.5.0) (2026-09-03)
+
+### Features
+
+* add X402 Nano Paywall drop-in seller node ([ece9cb1](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/ece9cb180a4c0dca99fd80c52d1d8864fb5146f5))
+
 ## [0.4.2](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.4.0...0.4.2) (2026-09-03)
 
 ### Bug Fixes
