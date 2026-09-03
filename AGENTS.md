@@ -1,6 +1,6 @@
 # AGENTS.md - n8n-nodes-x402-nanocurrency
 
-Guidelines for agentic coding tools working on the n8n-nodes-x402nano repository,
+Guidelines for agentic coding tools working on the n8n-nodes-x402-nanocurrency repository,
 an n8n community node package implementing the x402 payment protocol with Nano (XNO).
 
 ## Project Overview

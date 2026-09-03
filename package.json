@@ -3,7 +3,7 @@
 	"version": "0.2.0",
 	"description": "n8n community node for the x402 payment protocol with Nano (XNO): paywall triggers and payment flows for AI APIs and HTTP resources",
 	"license": "MIT",
-	"homepage": "https://github.com/Delkathes/n8n-nodes-x402nano",
+	"homepage": "https://github.com/Delkathes/n8n-nodes-x402-nanocurrency",
 	"keywords": [
 		"n8n-community-node-package",
 		"n8n",
@@ -21,7 +21,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Delkathes/n8n-nodes-x402nano.git"
+		"url": "https://github.com/Delkathes/n8n-nodes-x402-nanocurrency.git"
 	},
 	"scripts": {
 		"build": "n8n-node build",
