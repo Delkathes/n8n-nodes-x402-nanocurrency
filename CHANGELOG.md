@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.2](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.1...0.3.2) (2026-09-03)
+
+### Bug Fixes
+
+* require base-difficulty work for payments, airtight replay match, receive-tier PoW ([0c9d8f4](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/0c9d8f45c78595001ed0e18caaabe8089cff1d87))
+
 ## [0.3.1](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.3.0...0.3.1) (2026-09-03)
 
 ### Bug Fixes
