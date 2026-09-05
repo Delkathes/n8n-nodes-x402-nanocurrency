@@ -19,6 +19,11 @@ import { classifyPaywallRequest, normalizeHeaderKeys } from '../../utils/paywall
  * and normalized lowercase headers. Use headerInvalid to answer a distinct
  * 402 when the client tried to pay but the header is unusable.
  */
+// Settlement-capable seller nodes must never be exposed as AI tools: an agent
+// (or prompt injection) must not be able to drive classification/settlement.
+// `usableAsTool` is intentionally omitted (absent = not offered as a tool); the
+// community lint rule is disabled for this node.
+// eslint-disable-next-line @n8n/community-nodes/node-usable-as-tool
 export class X402NanoClassify implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'X402 Nano Classify',
@@ -29,15 +34,15 @@ export class X402NanoClassify implements INodeType {
 		},
 		group: ['transform'],
 		version: 1,
+		codex: {
+			categories: ['payments'],
+		},
 		subtitle: 'Classify paywall requests',
 		description:
 			'Classify x402 paywall requests: requests without a payment header go to the unpaid output, paid requests to the paid output.',
 		defaults: {
 			name: 'X402 Nano Classify',
 		},
-		// n8n's community-node lint requires `usableAsTool` to be declared and
-		// its type only allows `true`/a description (no false).
-		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [
 			{ type: NodeConnectionTypes.Main, displayName: 'Unpaid request' },

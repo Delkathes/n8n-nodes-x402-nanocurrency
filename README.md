@@ -136,10 +136,12 @@ Read this before wiring real money.
   `facilitator` delegates verify and settlement to the facilitator you point
   at: you trust it to check that a payment really matches your requirements
   and to process the block. `local` verifies and settles against your own Nano
-  RPC — you check everything yourself. The paywall adds a best-effort
-  on-chain amount check before a facilitator settle *when a Nano RPC
-  credential is reachable*: if the block is already on-chain with a different
-  amount than required, settlement is refused.
+  RPC — you check everything yourself. Facilitator settlement (paywall
+  auto-settle and the client `Settle Payment` operation) adds a best-effort
+  on-chain amount check before settling *when a Nano RPC credential is
+  reachable*: if the block is already on-chain with a different amount than
+  required, settlement is refused, so a broken or malicious facilitator cannot
+  undersell you.
 - **Idempotent retries need your RPC.** Retry protection (answering an
   already-settled payment idempotently instead of re-charging) resolves the
   block against a Nano RPC. Assign an `x402 Nano API` credential even in
@@ -160,6 +162,11 @@ Read this before wiring real money.
 - **This is real money.** Payments are irrevocable Nano sends. Test with
   dust amounts and a disposable `payTo` account before going live. The client
   node only ever pays from the account configured in its credential.
+- **Only the client node is an AI tool.** The `X402 Nano` client node is
+  exposed to agents (`usableAsTool`) and shows a warning that a prompt
+  injection could trigger real payments from the credential's account. The
+  `X402 Nano Paywall` and `X402 Nano Classify` nodes are intentionally **not**
+  AI tools — a settlement-capable seller node must not be agent-invocable.
 
 ## Known limitations
 

@@ -2,6 +2,11 @@ import { NodeConnectionTypes, type IExecuteFunctions, type INodeType, type INode
 
 import { executePaywall } from './handlers/paywall-handler';
 
+// A settlement-capable seller node must never be exposed as an AI tool: an
+// agent (or prompt injection) must not be able to drive classification/settlement.
+// `usableAsTool` is intentionally omitted (absent = not offered as a tool); the
+// community lint rule is disabled for this node.
+// eslint-disable-next-line @n8n/community-nodes/node-usable-as-tool
 export class X402NanoPaywall implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'X402 Nano Paywall',
@@ -12,6 +17,9 @@ export class X402NanoPaywall implements INodeType {
 		},
 		group: ['transform'],
 		version: 1,
+		codex: {
+			categories: ['payments'],
+		},
 		subtitle: 'Classify, verify, settle',
 		description:
 			'Drop-in seller node: classifies a webhook request, answers unpaid requests with a 402, verifies and settles paid ones, and emits ready-to-respond envelopes.',
@@ -189,11 +197,6 @@ export class X402NanoPaywall implements INodeType {
 				description: 'How to settle the received payment',
 			},
 		],
-		// n8n's community-node lint requires `usableAsTool` to be declared and
-		// its type only allows `true`/a description (no false). The node needs a
-		// webhook-shaped request to do anything, so it is inert as an AI tool
-		// unless a user explicitly adds it to an agent.
-		usableAsTool: true,
 	};
 
 	async execute(this: IExecuteFunctions) {

@@ -140,6 +140,7 @@ async function runNode(
 
 const RPC_CRED = { rpcUrl: 'https://rpc.nano.to', privateKey: TEST_PRIVATE_KEY.toString('hex') };
 const FACIL_CRED = { facilitatorUrl: 'https://x402nano.org/facilitator' };
+const FACIL_AND_RPC_CRED = { ...FACIL_CRED, ...RPC_CRED };
 
 describe('X402 Nano client operations', () => {
 	it('builds a signed v2 payment header (manual mode)', async () => {
@@ -431,5 +432,74 @@ describe('X402 Nano client operations', () => {
 		const json = item.json as { success: boolean; transaction?: string };
 		expect(json.success).toBe(true);
 		expect(json.transaction).toBe('F'.repeat(64));
+	});
+
+	it('refuses a facilitator settle when the on-chain block debits a different amount', async () => {
+		const { value } = signedV2Header();
+		const node = new X402Nano();
+		const context = mockContext({
+			params: {
+				resource: 'payment',
+				operation: 'settlePayment',
+				paymentSignature: value,
+				payTo: MERCHANT,
+				amount: AMOUNT_NANO,
+				settleMode: 'facilitator',
+			},
+			credential: FACIL_AND_RPC_CRED,
+			routes: {
+				rpc: (options) => {
+					if (options.body?.action === 'block_info') {
+						return {
+							block_account: PAYER,
+							amount: '1',
+							subtype: 'send',
+							contents: { link: 'x'.repeat(64), link_as_account: MERCHANT },
+						};
+					}
+					return undefined;
+				},
+				settle: { success: true, transaction: 'F'.repeat(64) },
+			},
+		});
+		let settleCalls = 0;
+		const helpers = context.helpers as { httpRequestWithAuthentication: (...args: unknown[]) => Promise<unknown> };
+		const orig = helpers.httpRequestWithAuthentication;
+		helpers.httpRequestWithAuthentication = async (...args: unknown[]) => {
+			const options = args[1] as { url?: string };
+			if (options.url?.includes('/settle')) {
+				settleCalls += 1;
+				return { success: false, errorReason: 'should not be reached' };
+			}
+			return orig.call(context, ...args);
+		};
+		await expect(node.execute.call(context)).rejects.toThrow(/does not debit the required amount/);
+		expect(settleCalls).toBe(0);
+	});
+
+	it('still settles through the facilitator when the on-chain guard is unreachable', async () => {
+		const { value } = signedV2Header();
+		const [item] = await runNode(
+			{
+				resource: 'payment',
+				operation: 'settlePayment',
+				paymentSignature: value,
+				payTo: MERCHANT,
+				amount: AMOUNT_NANO,
+				settleMode: 'facilitator',
+			},
+			{
+				credential: FACIL_AND_RPC_CRED,
+				routes: {
+					rpc: () => {
+						throw new Error('network down');
+					},
+					settle: { success: true, transaction: 'ABCDEF', network: 'nano:mainnet', payer: PAYER },
+				},
+			},
+		);
+		const json = item.json as { success: boolean; transaction: string };
+		expect(json.success).toBe(true);
+		expect(json.transaction).toBe('ABCDEF');
 	});
 });

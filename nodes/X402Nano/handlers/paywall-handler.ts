@@ -16,7 +16,6 @@ import {
 import {
 	buildPaymentResponseEnvelope,
 	buildPaymentRequiredResponse,
-	checkOnChainAmount,
 	detectOnChainReplay,
 	runPaymentSettlement,
 	runPaymentVerification,
@@ -214,24 +213,6 @@ export async function executePaywall(context: IExecuteFunctions): Promise<INodeE
 				amountRaw,
 			});
 			continue;
-		}
-
-		// Optional on-chain sanity check before settling through a facilitator:
-		// if a Nano RPC is reachable and the block is already on-chain with a
-		// different amount than required, refuse to settle (a broken or
-		// malicious facilitator must not undersell the merchant). Best-effort:
-		// null (guard unavailable / block not visible) proceeds to settle.
-		const onChainAmount = await checkOnChainAmount(context, block, amountRaw);
-		if (onChainAmount === false) {
-			throw new NodeOperationError(
-				context.getNode(),
-				'The payment block is already on-chain but does not debit the required amount; refusing to settle.',
-				{
-					itemIndex: i,
-					description:
-						'This can indicate a mismatched or tampered payment. Do not serve the content.',
-				},
-			);
 		}
 
 		const settleMode = context.getNodeParameter('settleMode', i, 'facilitator') as string;

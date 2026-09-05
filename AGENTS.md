@@ -26,6 +26,9 @@ payment requirements, and the client retries the request with a signed payment
     (not the 64-zero previous hash); an optional representative parameter
     applies to open blocks only. Receive blocks use receive-tier work
     difficulty with a base-difficulty fallback.
+  - The client node is the only AI-tool node (`usableAsTool: true`, with an
+    inline warning that agents must never drive real payments with untrusted
+    inputs).
 - **X402 Nano Paywall** (`nodes/X402Nano/X402NanoPaywall.node.ts`,
   `handlers/paywall-handler.ts`) — drop-in seller node placed after a built-in
   Webhook node. One pass per request: no usable payment header -> output 0
@@ -37,16 +40,23 @@ payment requirements, and the client retries the request with a signed payment
   without settling again. `autoSettle: false` emits the verified, unsettled
   payment on output 1 for later manual settlement. A failed settle raises a
   node error (never a 402) so the client retries the same signature.
-  `usableAsTool` is `true` — n8n's community-node lint requires the property
-  and its type only allows `true`/a description; the node needs webhook-shaped
-  input, so it is inert as an AI tool unless a user explicitly wires it.
+  `usableAsTool` is omitted (absent = not an AI tool): a settlement-capable
+  seller node must never be agent-invocable, so the mandatory community lint
+  rule `@n8n/community-nodes/node-usable-as-tool` is suppressed on this class.
+  Facilitator-mode settlement (here and on the client node) runs an optional
+  on-chain debit guard (`checkOnChainAmount` inside `runPaymentSettlement`,
+  operation-dispatcher): if a Nano RPC is reachable and the block is on-chain
+  with a different amount than required, settlement is refused — a broken or
+  malicious facilitator cannot undersell the merchant.
 - **X402 Nano Classify** (`nodes/X402Nano/X402NanoClassify.node.ts`) — resource
   server (seller): transform node with two labeled outputs (Unpaid request /
   Paid request) placed after a built-in Webhook node. Classifies requests
   natively via `utils/paywall-classifier.ts` (`classifyPaywallRequest`):
   normalized lowercase headers + `payment` object (`hasPayment`, `protocol`,
   `headerName`, `headerValue`, `headerInvalid`). Classification only — no
-  payload decoding (Verify Payment's job). IMPORTANT: a custom webhook TRIGGER
+  payload decoding (Verify Payment's job). Like the Paywall node,
+  `usableAsTool` is omitted (absent = not an AI tool; the community lint rule
+  is suppressed on this class). IMPORTANT: a custom webhook TRIGGER
   node cannot drive a Respond to Webhook workflow — the Respond to Webhook
   node only accepts `n8n-nodes-base.webhook`, `formTrigger`, `chatTrigger` and
   `wait` as ancestor types (verified against n8n 2.36
@@ -99,7 +109,6 @@ pnpm run release     # release-it: bump, changelog, commit, tag, push
 credentials/            # x402FacilitatorApi + x402NanoApi
 nodes/X402Nano/         # client node + paywall + classify nodes + icons
 utils/                  # vendored crypto, block builder, header codecs
-types/                  # x402 v1/v2 + Nano types
 test/                   # vitest tests
 .github/workflows/      # ci.yml (lint/test/build) + publish.yml (OIDC npm publish)
 ```
