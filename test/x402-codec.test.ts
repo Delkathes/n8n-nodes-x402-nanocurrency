@@ -4,6 +4,7 @@ import {
 	buildPaymentPayloadV1,
 	buildPaymentPayloadV2,
 	buildPaymentRequiredV2,
+	decodeBase64Json,
 	detectVersion,
 	encodePaymentHeader,
 	encodeSettlementHeader,
@@ -21,6 +22,7 @@ import {
 	parsePaymentRequired,
 	parseSettlementFromHeaders,
 } from '../utils/x402-codec';
+import type { AcceptV1, AcceptV2 } from '../utils/x402-codec';
 import type { NanoStateBlock } from '../utils/block';
 
 const BURN_ACCOUNT = 'nano_3t6k35gi95xu6tergt6p69ck76ogmitsa8mnijtpxm9fkcm736xtoncuohr3';
@@ -75,12 +77,14 @@ describe('v1 requirements (body)', () => {
 	});
 
 	it('canonicalizes numeric amounts without floating point rounding', () => {
+		// The wire JSON may deliver amounts as numbers even though the typed
+		// AcceptV1 declares strings — exercise the runtime tolerance.
 		const numeric = normalizeAcceptV1({
 			scheme: 'exact',
 			network: 'nano:mainnet',
 			maxAmountRequired: 42,
 			payTo: BURN_ACCOUNT,
-		});
+		} as unknown as AcceptV1);
 		expect(numeric.amountRaw).toBe('42');
 		expect(() =>
 			normalizeAcceptV1({
@@ -88,7 +92,7 @@ describe('v1 requirements (body)', () => {
 				network: 'nano:mainnet',
 				maxAmountRequired: 1e30,
 				payTo: BURN_ACCOUNT,
-			}),
+			} as unknown as AcceptV1),
 		).toThrow();
 	});
 });
@@ -230,13 +234,15 @@ describe('extractPaymentIdFromPayload', () => {
 	});
 
 	it('reads the paymentId from a v2 accepted echo (top-level and extra)', () => {
+		// Some servers echo the paymentId at the top of `accepted` even though
+		// the typed AcceptV2 declares it under `extra` — exercise both.
 		const topLevel = buildPaymentPayloadV2(SAMPLE_BLOCK, {
 			scheme: 'exact',
 			network: 'nano:mainnet',
 			amount: AMOUNT_RAW,
 			payTo: BURN_ACCOUNT,
 			paymentId: 'quote-456',
-		});
+		} as unknown as AcceptV2);
 		expect(extractPaymentIdFromPayload(topLevel)).toBe('quote-456');
 
 		const inExtra = buildPaymentPayloadV2(SAMPLE_BLOCK, {
@@ -363,5 +369,30 @@ describe('settlement', () => {
 
 	it('returns null when the settlement header is absent', () => {
 		expect(parseSettlementFromHeaders({}, 2)).toBeNull();
+	});
+});
+
+describe('base64url wire format', () => {
+	const payload = { x402Version: 2, accepts: [{ scheme: 'exact' }] };
+
+	it('emits unpadded base64url (no =, + or /)', () => {
+		const value = buildPaymentRequiredV2(
+			[{ scheme: 'exact', network: 'nano:mainnet', amount: AMOUNT_RAW, payTo: BURN_ACCOUNT }],
+		);
+		expect(value).not.toMatch(/[=+/]/);
+		expect(value).toMatch(/^[A-Za-z0-9_-]+$/);
+		expect(decodeBase64Json<{ x402Version: number }>(value)?.x402Version).toBe(2);
+	});
+
+	it('decodes standard padded, standard unpadded and url-safe padded forms', () => {
+		const expected = JSON.stringify(payload);
+		const std = Buffer.from(expected).toString('base64'); // padded standard
+		const stdNoPad = std.replace(/=+$/, '');
+		const urlSafe = Buffer.from(expected).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
+		const urlSafePadded = urlSafe + '='.repeat((4 - (urlSafe.length % 4)) % 4);
+
+		for (const form of [std, stdNoPad, urlSafePadded]) {
+			expect(decodeBase64Json(form)).toEqual(payload);
+		}
 	});
 });

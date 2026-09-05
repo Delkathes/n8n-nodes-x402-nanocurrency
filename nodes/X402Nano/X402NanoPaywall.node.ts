@@ -189,6 +189,10 @@ export class X402NanoPaywall implements INodeType {
 				description: 'How to settle the received payment',
 			},
 		],
+		// n8n's community-node lint requires `usableAsTool` to be declared and
+		// its type only allows `true`/a description (no false). The node needs a
+		// webhook-shaped request to do anything, so it is inert as an AI tool
+		// unless a user explicitly adds it to an agent.
 		usableAsTool: true,
 	};
 

@@ -37,7 +37,9 @@ payment requirements, and the client retries the request with a signed payment
   without settling again. `autoSettle: false` emits the verified, unsettled
   payment on output 1 for later manual settlement. A failed settle raises a
   node error (never a 402) so the client retries the same signature.
-  `usableAsTool: false` — it answers webhook requests.
+  `usableAsTool` is `true` — n8n's community-node lint requires the property
+  and its type only allows `true`/a description; the node needs webhook-shaped
+  input, so it is inert as an AI tool unless a user explicitly wires it.
 - **X402 Nano Classify** (`nodes/X402Nano/X402NanoClassify.node.ts`) — resource
   server (seller): transform node with two labeled outputs (Unpaid request /
   Paid request) placed after a built-in Webhook node. Classifies requests
@@ -95,7 +97,7 @@ pnpm run release     # release-it: bump, changelog, commit, tag, push
 
 ```
 credentials/            # x402FacilitatorApi + x402NanoApi
-nodes/X402Nano/         # client node + trigger node + icons
+nodes/X402Nano/         # client node + paywall + classify nodes + icons
 utils/                  # vendored crypto, block builder, header codecs
 types/                  # x402 v1/v2 + Nano types
 test/                   # vitest tests

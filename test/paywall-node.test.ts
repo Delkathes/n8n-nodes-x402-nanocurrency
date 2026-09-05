@@ -78,6 +78,18 @@ type RouteResponses = {
 	process?: Record<string, unknown>;
 };
 
+type AuthHttpFn = (
+	credentialType: string,
+	options: { url?: string; body?: { action?: string } },
+) => Promise<unknown>;
+
+/** Swap the mocked httpRequestWithAuthentication with a wrapping patch. */
+function patchAuthHttp(context: IExecuteFunctions, patch: (orig: AuthHttpFn) => AuthHttpFn): void {
+	const helpers = context.helpers as { httpRequestWithAuthentication: AuthHttpFn };
+	const orig = helpers.httpRequestWithAuthentication;
+	helpers.httpRequestWithAuthentication = patch(orig);
+}
+
 const DEFAULTS: Record<string, unknown> = {
 	payTo: MERCHANT,
 	amount: AMOUNT_NANO,
@@ -240,17 +252,13 @@ describe('X402 Nano Paywall', () => {
 			},
 		});
 		// Count settle calls by wrapping the route response.
-		const orig = (context.helpers as { httpRequestWithAuthentication: unknown }).httpRequestWithAuthentication;
-		(context.helpers as { httpRequestWithAuthentication: unknown }).httpRequestWithAuthentication = async (
-			_credentialType: string,
-			options: { url?: string; body?: { action?: string } },
-		) => {
+		patchAuthHttp(context, (orig) => async (_credentialType: string, options: { url?: string; body?: { action?: string } }) => {
 			if (options.url?.includes('/settle')) {
 				settleCalls += 1;
 				return { success: false, errorReason: 'should not be called' };
 			}
 			return orig.call(context, _credentialType, options);
-		};
+		});
 
 		const [required, received] = await node.execute.call(context);
 		expect(settleCalls).toBe(0);
@@ -311,6 +319,26 @@ describe('X402 Nano Paywall', () => {
 		}
 	});
 
+	it('surfaces local RPC transport failures as errors (never a 402)', async () => {
+		const node = new X402NanoPaywall();
+		DEFAULTS.verificationMode = 'local';
+		try {
+			const context = mockContext(
+				[withHeader({ 'payment-signature': encodeV2PaymentHeader(makeSignedSendBlock(AMOUNT_RAW)) })],
+				{},
+			);
+			patchAuthHttp(context, (orig) => async (_credentialType: string, options: { url?: string; body?: { action?: string } }) => {
+				if (options.body?.action === 'account_info') {
+					throw new Error('network down');
+				}
+				return orig.call(context, _credentialType, options);
+			});
+			await expect(node.execute.call(context)).rejects.toThrow(/network down/);
+		} finally {
+			DEFAULTS.verificationMode = 'facilitator';
+		}
+	});
+
 	it('accepts and settles an exact-amount payment in local mode end to end', async () => {
 		const node = new X402NanoPaywall();
 		DEFAULTS.verificationMode = 'local';
@@ -332,8 +360,7 @@ describe('X402 Nano Paywall', () => {
 		}
 	});
 
-	it('surfaces an error instead of a 402 when replay detection cannot run', async () => {
-		const node = new X402NanoPaywall();
+	it('surfaces an error instead of a 402 when replay detection cannot run', async () => {		const node = new X402NanoPaywall();
 		const context = mockContext(
 			[withHeader({ 'payment-signature': encodeV2PaymentHeader(makeSignedSendBlock(AMOUNT_RAW)) })],
 			{ verify: { isValid: false, invalidReason: 'already processed' } },
@@ -364,17 +391,13 @@ describe('X402 Nano Paywall', () => {
 		const context = mockContext([withHeader({ 'payment-signature': encodeV2PaymentHeader(forged) })], {
 			verify: { isValid: false, invalidReason: 'invalid signature' },
 		});
-		const orig = (context.helpers as { httpRequestWithAuthentication: unknown }).httpRequestWithAuthentication;
-		(context.helpers as { httpRequestWithAuthentication: unknown }).httpRequestWithAuthentication = async (
-			_credentialType: string,
-			options: { url?: string; body?: { action?: string } },
-		) => {
+		patchAuthHttp(context, (orig) => async (_credentialType: string, options: { url?: string; body?: { action?: string } }) => {
 			if (options.body?.action === 'block_info') {
 				blockInfoCalls += 1;
 				return { error: 'Block not found' };
 			}
 			return orig.call(context, _credentialType, options);
-		};
+		});
 		const [required, received] = await node.execute.call(context);
 		expect(required).toHaveLength(1);
 		expect(received).toHaveLength(0);
@@ -429,6 +452,24 @@ describe('X402 Nano Paywall', () => {
 		} finally {
 			DEFAULTS.paymentId = '';
 		}
+	});
+
+	it('refuses to settle when the on-chain block debits a different amount', async () => {
+		const node = new X402NanoPaywall();
+		const block = makeSignedSendBlock(AMOUNT_RAW);
+		await expect(
+			node.execute.call(
+				mockContext([withHeader({ 'payment-signature': encodeV2PaymentHeader(block) })], {
+					verify: { isValid: true, payer: PAYER },
+					blockInfo: {
+						block_account: PAYER,
+						amount: '1',
+						subtype: 'send',
+						contents: { link: block.link, link_as_account: MERCHANT },
+					},
+				}),
+			),
+		).rejects.toThrow(/does not debit the required amount/);
 	});
 
 	it('emits an unsettled replayed envelope (no settlement headers) when auto-settle is off', async () => {

@@ -88,7 +88,11 @@ export async function facilitatorSettle(
 
 	return {
 		success: response.success === true,
-		...(typeof response.transaction === 'string' ? { transaction: response.transaction } : {}),
+		...(typeof response.transaction === 'string'
+			? { transaction: response.transaction }
+			: typeof response.hash === 'string'
+				? { transaction: response.hash }
+				: {}),
 		...(typeof response.network === 'string' ? { network: response.network } : {}),
 		...(typeof response.payer === 'string' ? { payer: response.payer } : {}),
 		...(typeof response.errorReason === 'string' ? { errorReason: response.errorReason } : {}),

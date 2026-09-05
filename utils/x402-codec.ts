@@ -148,12 +148,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function encodeBase64Json(value: unknown): string {
-	return Buffer.from(JSON.stringify(value)).toString('base64');
+	// x402 headers use base64url (RFC 4648 §5), unpadded. Header values are
+	// carried inside HTTP headers where '+', '/' and trailing '=' are awkward
+	// (and stricter peers reject standard base64 entirely).
+	return Buffer.from(JSON.stringify(value))
+		.toString('base64')
+		.replace(/\+/g, '-')
+		.replace(/\//g, '_')
+		.replace(/=+$/, '');
 }
 
 export function decodeBase64Json<T = unknown>(value: string): T | null {
 	try {
-		const parsed = JSON.parse(Buffer.from(value, 'base64').toString('utf-8'));
+		// Tolerate every legacy form: standard + base64url, padded + unpadded.
+		const urlSafeToStandard = value.replace(/-/g, '+').replace(/_/g, '/');
+		const padded = urlSafeToStandard.padEnd(Math.ceil(urlSafeToStandard.length / 4) * 4, '=');
+		const parsed = JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'));
 		return parsed as T;
 	} catch {
 		return null;

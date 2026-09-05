@@ -182,13 +182,29 @@ async function httpRaw(
 	const response = (await context.helpers.httpRequest(options)) as {
 		statusCode: number;
 		headers: Record<string, unknown>;
-		body: Buffer | string;
+		body: unknown;
 	};
 	return {
 		statusCode: response.statusCode,
 		headers: response.headers,
-		body: Buffer.isBuffer(response.body) ? response.body : Buffer.from(response.body ?? ''),
+		body: toBufferBody(response.body),
 	};
+}
+
+function toBufferBody(body: unknown): Buffer {
+	if (Buffer.isBuffer(body)) {
+		return body;
+	}
+	if (typeof body === 'string') {
+		return Buffer.from(body, 'utf-8');
+	}
+	if (body !== undefined && body !== null) {
+		// The HTTP layer already parsed a JSON body (some n8n/Node versions
+		// auto-parse despite `encoding: arraybuffer`): reserialize it so the
+		// response decoder below sees the original text.
+		return Buffer.from(JSON.stringify(body), 'utf-8');
+	}
+	return Buffer.alloc(0);
 }
 
 function decodeResponseBody(response: RawHttpResponse): unknown {
@@ -717,15 +733,42 @@ export async function runPaymentVerification(
 			debitInvalid = balanceAfter > balanceBefore;
 			debitMatches = !debitInvalid && balanceBefore - balanceAfter === BigInt(amountRaw);
 		}
-	} catch {
-		balanceSufficient = false;
+	} catch (error) {
+		if (error instanceof X402PaymentError) {
+			// The RPC answered (e.g. "Account not found"): the payment cannot be
+			// validated against the payer state -> genuinely invalid, not infra.
+			balanceSufficient = false;
+		} else {
+			// Network/timeout/transport failure: surface it so a transient outage
+			// cannot masquerade as "payment invalid" (which would 402 a valid
+			// payment and make the client pay again).
+			throw new NodeOperationError(
+				context.getNode(),
+				error instanceof Error ? error : new Error(String(error)),
+				{
+					description:
+						'The Nano RPC could not be reached while verifying the payment. The payment was not rejected — retry the same signature.',
+				},
+			);
+		}
 	}
 
 	let workValid = false;
 	try {
 		workValid = await validateWork(context, nanoConfig, block.previous, block.work);
-	} catch {
-		workValid = false;
+	} catch (error) {
+		if (error instanceof X402PaymentError) {
+			workValid = false;
+		} else {
+			throw new NodeOperationError(
+				context.getNode(),
+				error instanceof Error ? error : new Error(String(error)),
+				{
+					description:
+						'The Nano RPC could not be reached while validating the block proof of work. The payment was not rejected — retry the same signature.',
+				},
+			);
+		}
 	}
 
 	// Replay detection + idempotent replay matching. When the payment block is
@@ -848,6 +891,37 @@ export async function detectOnChainReplay(
 			replaySubtypeMatches &&
 			replayLinkMatches,
 	};
+}
+
+/**
+ * Optional belt-and-braces guard for facilitator-mode settlement: when a Nano
+ * RPC credential is reachable, check that the block that is about to be
+ * settled is on-chain with exactly the required amount. This closes the gap
+ * where a facilitator verifies a payment but the ledger shows a different
+ * amount (a broken or malicious facilitator underselling the merchant).
+ *
+ * Returns:
+ *   true  - the block is on-chain and debits exactly `amountRaw`
+ *   false - the block is on-chain but debits a different amount (refuse to settle)
+ *   null  - the guard cannot run (no credential / block not visible / RPC
+ *           unreachable) — deliberately permissive, never blocks settlement
+ */
+export async function checkOnChainAmount(
+	context: IExecuteFunctions,
+	block: NanoStateBlock,
+	amountRaw: string,
+): Promise<boolean | null> {
+	try {
+		const computedHash = computeStateBlockHash(block);
+		if (!computedHash) return null;
+		const nanoCredentials = await context.getCredentials('x402NanoApi');
+		const nanoConfig = getNanoRpcConfig(nanoCredentials);
+		const blockInfo = await getBlockInfo(context, nanoConfig, computedHash.toString('hex'));
+		if (!blockInfo) return null;
+		return blockInfo.amount === amountRaw;
+	} catch {
+		return null;
+	}
 }
 
 export interface SettlePaymentInput {

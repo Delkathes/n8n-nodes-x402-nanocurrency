@@ -35,6 +35,8 @@ export class X402NanoClassify implements INodeType {
 		defaults: {
 			name: 'X402 Nano Classify',
 		},
+		// n8n's community-node lint requires `usableAsTool` to be declared and
+		// its type only allows `true`/a description (no false).
 		usableAsTool: true,
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [

@@ -282,9 +282,18 @@ export async function processBlock(
 	config: NanoRpcConfig,
 	block: Record<string, unknown>,
 ): Promise<string> {
+	// Send only the canonical state-block fields. Derived/convenience fields
+	// such as link_as_account are not part of the RPC block schema; some strict
+	// nodes reject unknown keys even though mainstream nodes ignore them.
+	const canonical: Record<string, unknown> = {};
+	for (const key of ['type', 'account', 'previous', 'representative', 'balance', 'link', 'work', 'signature'] as const) {
+		if (block[key] !== undefined) {
+			canonical[key] = block[key];
+		}
+	}
 	const data = await nanoRpcCall(context, config, 'process', {
 		json_block: 'true',
-		block,
+		block: canonical,
 	});
 	if (typeof data.hash !== 'string' || data.hash.length !== 64) {
 		throw new X402PaymentError('Failed to process the payment block on the Nano node.');

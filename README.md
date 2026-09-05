@@ -62,6 +62,17 @@ metadata, `protocol` (v1 / v2 / both, dual-mode by default),
 `verificationMode` and `settleMode` (facilitator or local Nano RPC — both
 credentials are optional). `amount` can be an expression for dynamic pricing.
 
+**Per-request `paymentId` (recommended for sellers).** Bind each request to a
+fresh identifier so a settled payment can never be reused for another request:
+
+| Parameter | Expression |
+| --- | --- |
+| `Amount (NANO)` | `={{ $json.body.tokens * 0.00002 }}` — dynamic price per request |
+| `Payment ID` | `={{ $json.headers['x-request-id'] ?? $execution.id }}` — the payer echoes it back |
+
+Set a fixed `amount` and leave `paymentId` empty only when a static,
+replayable price is acceptable (see *Risk & trust model*).
+
 ### `X402 Nano Classify` node (resource server — seller, building block)
 
 Low-level alternative to `X402 Nano Paywall` when you want to interleave your
@@ -116,6 +127,39 @@ The Nano block inside `payload` is identical in both versions.
 
 - **x402 Facilitator API** — facilitator base URL + optional API key (`/supported`, `/verify`, `/settle`)
 - **x402 Nano API** — Nano node RPC URL + auth, optional wallet (node signing via `enable_control`) or private key (local signing), optional work server
+
+## Risk & trust model
+
+Read this before wiring real money.
+
+- **Facilitator vs local is a trust decision.** `verificationMode`/`settleMode`
+  `facilitator` delegates verify and settlement to the facilitator you point
+  at: you trust it to check that a payment really matches your requirements
+  and to process the block. `local` verifies and settles against your own Nano
+  RPC — you check everything yourself. The paywall adds a best-effort
+  on-chain amount check before a facilitator settle *when a Nano RPC
+  credential is reachable*: if the block is already on-chain with a different
+  amount than required, settlement is refused.
+- **Idempotent retries need your RPC.** Retry protection (answering an
+  already-settled payment idempotently instead of re-charging) resolves the
+  block against a Nano RPC. Assign an `x402 Nano API` credential even in
+  facilitator mode; without one, a retry of a settled payment surfaces as a
+  node error (the client never pays twice, but the request fails until you
+  add the credential).
+- **Static paywalls are replayable by their payer.** A payment for a fixed
+  price unlocks that price forever unless you bind it to a request. Set a
+  **per-request `paymentId`** (an expression) on the paywall so a settled
+  payment can only be used for the one request it was made for. Per-request
+  `paymentId` is the recommended pattern for anything you sell.
+- **Forged requests are cheap.** A header that does not carry a valid Nano
+  signature is answered `402` without any RPC call, so random clients cannot
+  turn the paywall into a free RPC oracle. Abuse (hammering your endpoint
+  with free 402 probes) is handled upstream of this node — rate-limit the
+  webhook, keep business logic behind the `Payment received` output, and never
+  serve content before verification + settlement.
+- **This is real money.** Payments are irrevocable Nano sends. Test with
+  dust amounts and a disposable `payTo` account before going live. The client
+  node only ever pays from the account configured in its credential.
 
 ## Known limitations
 
