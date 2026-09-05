@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.1](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.6.0...0.6.1) (2026-09-05)
+
+### Bug Fixes
+
+* close facilitator settle debit-gap and de-tool seller nodes ([cbb6010](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/cbb60107bc02dc0096ef700523c61ece1b62cc40))
+
 # [0.6.0](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.5.1...0.6.0) (2026-09-05)
 
 ### Features
