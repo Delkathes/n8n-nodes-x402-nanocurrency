@@ -18,6 +18,9 @@ export class X402Nano implements INodeType {
 		},
 		group: ['transform'],
 		version: 1,
+		codex: {
+			categories: ['payments'],
+		},
 		subtitle: 'Pay for HTTP resources with Nano',
 		description:
 			'x402 payment protocol client: pay for AI APIs and other HTTP resources with Nano (XNO)',

@@ -12,7 +12,7 @@ import { decodeNanoAddress } from './nano-address';
 import { blake2b256 } from './blake2b';
 import { signEd25519Blake2b, verifyEd25519Blake2b } from './ed25519-blake2b';
 
-export const MAX_UINT128 = (1n << 128n) - 1n;
+const MAX_UINT128 = (1n << 128n) - 1n;
 
 export interface NanoStateBlock {
 	type: 'state';

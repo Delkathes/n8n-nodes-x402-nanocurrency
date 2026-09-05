@@ -30,7 +30,7 @@ export function getNanoRpcConfig(credentials: ICredentialDataDecryptedObject): N
 	};
 }
 
-export async function nanoRpcCall(
+async function nanoRpcCall(
 	context: IExecuteFunctions,
 	config: NanoRpcConfig,
 	action: string,

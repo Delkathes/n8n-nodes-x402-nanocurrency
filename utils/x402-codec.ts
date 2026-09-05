@@ -76,13 +76,7 @@ export interface AcceptV2 {
 	extra?: Record<string, unknown>;
 }
 
-export interface PaymentRequiredV1 {
-	x402Version?: number;
-	error?: unknown;
-	accepts: AcceptV1[];
-}
-
-export interface PaymentRequiredV2 {
+interface PaymentRequiredV2 {
 	x402Version: 2;
 	error?: string;
 	resource?: ResourceInfo;
@@ -147,7 +141,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function encodeBase64Json(value: unknown): string {
+function encodeBase64Json(value: unknown): string {
 	// x402 headers use base64url (RFC 4648 §5), unpadded. Header values are
 	// carried inside HTTP headers where '+', '/' and trailing '=' are awkward
 	// (and stricter peers reject standard base64 entirely).
@@ -170,7 +164,7 @@ export function decodeBase64Json<T = unknown>(value: string): T | null {
 	}
 }
 
-export function tryParseJson(value: string): unknown {
+function tryParseJson(value: string): unknown {
 	try {
 		return JSON.parse(value);
 	} catch {
@@ -249,7 +243,7 @@ export function normalizeAcceptV2(accept: AcceptV2): NormalizedAccept {
 	};
 }
 
-export function normalizeAccept(accept: unknown, version: X402Version): NormalizedAccept | null {
+function normalizeAccept(accept: unknown, version: X402Version): NormalizedAccept | null {
 	if (!isRecord(accept)) {
 		return null;
 	}
@@ -499,7 +493,7 @@ export function extractPaymentIdFromPayload(
 }
 
 /** Parse a settlement header (X-PAYMENT-RESPONSE or PAYMENT-RESPONSE). */
-export function parseSettlementHeader(value: string): NormalizedSettlement | null {
+function parseSettlementHeader(value: string): NormalizedSettlement | null {
 	const decoded = decodeBase64Json<unknown>(value) ?? tryParseJson(value);
 	if (!isRecord(decoded)) {
 		return null;
