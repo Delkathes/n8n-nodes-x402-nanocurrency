@@ -1,5 +1,11 @@
 # Changelog
 
+# [0.6.0](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.5.1...0.6.0) (2026-09-05)
+
+### Features
+
+* harden package for third-party readiness ([47ec8f3](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/47ec8f33ff7965a54e7b286a0c434344f3e14445))
+
 ## [0.5.1](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.5.0...0.5.1) (2026-09-05)
 
 ### Bug Fixes
