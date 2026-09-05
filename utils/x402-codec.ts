@@ -16,6 +16,8 @@
 
 import type { NanoStateBlock } from './block';
 
+import { toAmountRaw } from './conversions';
+
 export type X402Version = 1 | 2;
 
 export const HEADER_V1_PAYMENT = 'X-PAYMENT';
@@ -196,7 +198,7 @@ export function normalizeAcceptV1(accept: AcceptV1): NormalizedAccept {
 	}
 
 	const scheme = accept.protocolScheme ?? (accept.scheme === 'nano-exact' ? 'exact' : accept.scheme);
-	const amountRaw = accept.maxAmountRequired ?? accept.amount ?? '0';
+	const amountRaw = toAmountRaw(accept.maxAmountRequired ?? accept.amount ?? '0');
 	const paymentId =
 		typeof accept.paymentId === 'string'
 			? accept.paymentId
@@ -227,7 +229,7 @@ export function normalizeAcceptV2(accept: AcceptV2): NormalizedAccept {
 	return {
 		scheme: accept.scheme,
 		network: accept.network,
-		amountRaw: accept.amount,
+		amountRaw: toAmountRaw(accept.amount),
 		payTo: accept.payTo,
 		asset: accept.asset,
 		maxTimeoutSeconds: accept.maxTimeoutSeconds,
@@ -457,6 +459,33 @@ export function extractBlockFromPayload(
 		return null;
 	}
 	return block as unknown as NanoStateBlock;
+}
+
+/**
+ * Extract the paymentId a payment payload was built for, if any.
+ * v1 carries it in `payload.paymentId`; v2 echoes it inside `accepted`
+ * (top-level or under `extra`), mirroring the advertised requirements.
+ */
+export function extractPaymentIdFromPayload(
+	payload: PaymentPayloadV1 | PaymentPayloadV2,
+): string | undefined {
+	const inner = payload.payload as Record<string, unknown>;
+	if (isRecord(inner) && typeof inner.paymentId === 'string' && inner.paymentId.length > 0) {
+		return inner.paymentId;
+	}
+	const accepted = (payload as unknown as Record<string, unknown>).accepted as
+		| Record<string, unknown>
+		| undefined;
+	if (isRecord(accepted)) {
+		if (typeof accepted.paymentId === 'string' && accepted.paymentId.length > 0) {
+			return accepted.paymentId;
+		}
+		const extra = accepted.extra as Record<string, unknown> | undefined;
+		if (isRecord(extra) && typeof extra.paymentId === 'string' && extra.paymentId.length > 0) {
+			return extra.paymentId;
+		}
+	}
+	return undefined;
 }
 
 /** Parse a settlement header (X-PAYMENT-RESPONSE or PAYMENT-RESPONSE). */

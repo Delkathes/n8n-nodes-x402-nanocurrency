@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeRequestHeaders } from '../utils/request-headers';
+import { coerceJsonBody, normalizeRequestHeaders } from '../utils/request-headers';
 
 describe('normalizeRequestHeaders', () => {
 	it('accepts a plain JSON string', () => {
@@ -31,5 +31,27 @@ describe('normalizeRequestHeaders', () => {
 		expect(normalizeRequestHeaders(42).headers).toEqual({});
 		expect(normalizeRequestHeaders(true).headers).toEqual({});
 		expect(normalizeRequestHeaders(['a']).headers).toEqual({});
+	});
+});
+
+describe('coerceJsonBody', () => {
+	it('passes objects through as-is', () => {
+		expect(coerceJsonBody({ prompt: 'hello' }).value).toEqual({ prompt: 'hello' });
+	});
+
+	it('parses JSON text strings into objects', () => {
+		expect(coerceJsonBody('{"prompt":"hello"}').value).toEqual({ prompt: 'hello' });
+		expect(coerceJsonBody('  {"a":1}  ').value).toEqual({ a: 1 });
+	});
+
+	it('returns undefined value for empty input', () => {
+		expect(coerceJsonBody('').value).toBeUndefined();
+		expect(coerceJsonBody('   ').value).toBeUndefined();
+		expect(coerceJsonBody(undefined).value).toBeUndefined();
+	});
+
+	it('reports a clear error for invalid JSON text', () => {
+		expect(coerceJsonBody('not-json').error?.kind).toBe('invalid');
+		expect(coerceJsonBody('{broken').error?.message).toMatch(/valid JSON/);
 	});
 });

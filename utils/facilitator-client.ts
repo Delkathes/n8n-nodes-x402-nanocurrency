@@ -7,6 +7,7 @@
 
 import type { IExecuteFunctions, ICredentialDataDecryptedObject } from 'n8n-workflow';
 
+import { X402PaymentError } from './errors';
 import type { NormalizedSettlement } from './x402-codec';
 
 export interface FacilitatorConfig {
@@ -15,9 +16,13 @@ export interface FacilitatorConfig {
 }
 
 export function getFacilitatorConfig(credentials: ICredentialDataDecryptedObject): FacilitatorConfig {
-	const baseUrl = ((credentials.facilitatorUrl as string) || 'https://x402nano.org/facilitator')
-		.trim()
-		.replace(/\/+$/, '');
+	const raw = typeof credentials.facilitatorUrl === 'string' ? credentials.facilitatorUrl.trim() : '';
+	if (!raw) {
+		throw new X402PaymentError(
+			'The X402 Facilitator API credential has no URL configured. Set the "Facilitator URL" field on the credential.',
+		);
+	}
+	const baseUrl = raw.replace(/\/+$/, '');
 	return { baseUrl, timeoutMs: 30000 };
 }
 

@@ -1,6 +1,6 @@
  
 
-import type { IDataObject, IExecuteFunctions, IHttpRequestOptions } from 'n8n-workflow';
+import type { IDataObject, ICredentialDataDecryptedObject, IExecuteFunctions, IHttpRequestOptions } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 
 import { derivePublicKey } from '../../../utils/ed25519-blake2b';
@@ -16,7 +16,7 @@ import {
 import type { NanoStateBlock } from '../../../utils/block';
 import { isValidNanoAmount, nanoToRaw, rawToNano } from '../../../utils/conversions';
 import { X402PaymentError } from '../../../utils/errors';
-import { normalizeRequestHeaders } from '../../../utils/request-headers';
+import { coerceJsonBody, normalizeRequestHeaders } from '../../../utils/request-headers';
 import {
 	getFacilitatorConfig,
 	facilitatorGetSupported,
@@ -78,6 +78,40 @@ interface RequestSpec {
 	timeout: number;
 }
 
+/**
+ * Resolve a credential with an actionable message. Optional credential types
+ * otherwise surface n8n's generic "no credentials found" error, which does not
+ * tell the user which credential the node needs and why.
+ */
+async function requireCredentials(
+	context: IExecuteFunctions,
+	credentialName: 'x402NanoApi' | 'x402FacilitatorApi',
+	usage: string,
+): Promise<ICredentialDataDecryptedObject> {
+	try {
+		return await context.getCredentials(credentialName);
+	} catch {
+		const label =
+			credentialName === 'x402NanoApi' ? 'X402 Nano API (Nano RPC)' : 'X402 Facilitator API';
+		throw new NodeOperationError(
+			context.getNode(),
+			`The ${label} credential is required for ${usage}. Assign it on the node and make sure its URL field is set.`,
+		);
+	}
+}
+
+/** Parse a raw-unit string into BigInt, or null when it is not a digit string. */
+function parseRawBigInt(value: unknown): bigint | null {
+	if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+		return null;
+	}
+	try {
+		return BigInt(value);
+	} catch {
+		return null;
+	}
+}
+
 function readRequestSpec(context: IExecuteFunctions, i: number): RequestSpec {
 	const headersParam = context.getNodeParameter('requestHeaders', i, '{}') as unknown;
 	const normalized = normalizeRequestHeaders(headersParam);
@@ -89,7 +123,11 @@ function readRequestSpec(context: IExecuteFunctions, i: number): RequestSpec {
 	const bodyType = context.getNodeParameter('bodyType', i, 'json') as string;
 	let jsonBody: unknown;
 	if (bodyType === 'json') {
-		jsonBody = context.getNodeParameter('jsonBody', i, {}) as unknown;
+		const coerced = coerceJsonBody(context.getNodeParameter('jsonBody', i, {}) as unknown);
+		if (coerced.error) {
+			throw new NodeOperationError(context.getNode(), coerced.error.message);
+		}
+		jsonBody = coerced.value;
 	}
 
 	return {
@@ -200,7 +238,7 @@ async function executePayment(
 	accept: NormalizedAccept,
 	version: X402Version,
 ): Promise<ExecutedPayment> {
-	const credentials = await context.getCredentials('x402NanoApi');
+	const credentials = await requireCredentials(context, 'x402NanoApi', 'signing and sending payments');
 	const config = getNanoRpcConfig(credentials);
 	const privateKeyHex = ((credentials.privateKey as string) ?? '').trim();
 	const walletId = ((credentials.walletId as string) ?? '').trim();
@@ -349,21 +387,38 @@ async function handlePay(context: IExecuteFunctions, i: number): Promise<IDataOb
 	const settlement = parseSettlementFromHeaders(paid.headers, version);
 	const result = normalizeHttpResponse(paid);
 
-	return {
-		...result,
-		payment: {
-			protocolVersion: version,
-			success: settlement ? settlement.success : (paid.statusCode ?? 0) < 400,
-			...(settlement?.transaction ? { transaction: settlement.transaction } : {}),
-			network: settlement?.network ?? accept.network,
-			...(settlement?.payer ? { payer: settlement.payer } : { payer: payment.account }),
-			amountRaw: accept.amountRaw,
-			amountNano: rawToNano(accept.amountRaw),
-			...(accept.paymentId ? { paymentId: accept.paymentId } : {}),
-			...(settlement?.errorReason ? { errorReason: settlement.errorReason } : {}),
-			...(settlement ? { settlement } : {}),
-		},
-	};
+	try {
+		return {
+			...result,
+			payment: {
+				protocolVersion: version,
+				success: settlement ? settlement.success : (paid.statusCode ?? 0) < 400,
+				...(settlement?.transaction ? { transaction: settlement.transaction } : {}),
+				network: settlement?.network ?? accept.network,
+				...(settlement?.payer ? { payer: settlement.payer } : { payer: payment.account }),
+				amountRaw: accept.amountRaw,
+				amountNano: rawToNano(accept.amountRaw),
+				...(accept.paymentId ? { paymentId: accept.paymentId } : {}),
+				...(settlement?.errorReason ? { errorReason: settlement.errorReason } : {}),
+				...(settlement ? { settlement } : {}),
+			},
+		};
+	} catch (error) {
+		// The payment was already sent and settled on the ledger; never turn a
+		// response-mapping failure into a node error here, or a manual re-run
+		// would pay a second time. Surface the paid response with a warning.
+		return {
+			...result,
+			payment: {
+				protocolVersion: version,
+				success: true,
+				amountRaw: accept.amountRaw,
+				warning: `Payment was sent, but the response could not be parsed: ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			},
+		};
+	}
 }
 
 async function handleProbe(context: IExecuteFunctions, i: number): Promise<IDataObject> {
@@ -519,8 +574,8 @@ async function handleBuildPaymentSignature(
 		amountNano = rawToNano(parsedAccept.amountRaw);
 		paymentId = parsedAccept.paymentId;
 	} else {
-		payTo = context.getNodeParameter('payTo', i) as string;
-		amountNano = context.getNodeParameter('amount', i) as string;
+		payTo = String(context.getNodeParameter('payTo', i));
+		amountNano = String(context.getNodeParameter('amount', i));
 		version =
 			(context.getNodeParameter('signatureProtocolVersion', i, 'v2') as string) === 'v1' ? 1 : 2;
 	}
@@ -612,7 +667,7 @@ export async function runPaymentVerification(
 	};
 
 	if (mode === 'facilitator') {
-		const credentials = await context.getCredentials('x402FacilitatorApi');
+		const credentials = await requireCredentials(context, 'x402FacilitatorApi', 'verifying payments');
 		const config = getFacilitatorConfig(credentials);
 		const result = await facilitatorVerify(
 			context,
@@ -628,7 +683,7 @@ export async function runPaymentVerification(
 		} as IDataObject;
 	}
 
-	const nanoCredentials = await context.getCredentials('x402NanoApi');
+	const nanoCredentials = await requireCredentials(context, 'x402NanoApi', 'verifying payments locally');
 	const nanoConfig = getNanoRpcConfig(nanoCredentials);
 
 	const payToMatches =
@@ -642,6 +697,8 @@ export async function runPaymentVerification(
 	let balanceSufficient = false;
 	let frontierMatches = false;
 	let confirmedFrontierMatches = false;
+	let debitMatches = false;
+	let debitInvalid = false;
 	try {
 		const info = await getAccountInfo(context, nanoConfig, block.account, {
 			includeConfirmed: true,
@@ -651,6 +708,14 @@ export async function runPaymentVerification(
 		if (info.confirmedFrontier) {
 			confirmedFrontierMatches =
 				info.confirmedFrontier.toLowerCase() === block.previous.toLowerCase();
+		}
+		// Authoritative amount check: the signed block must debit exactly the
+		// required amount from the payer's current (frontier) balance.
+		const balanceBefore = parseRawBigInt(info.balance);
+		const balanceAfter = parseRawBigInt(block.balance);
+		if (balanceBefore !== null && balanceAfter !== null) {
+			debitInvalid = balanceAfter > balanceBefore;
+			debitMatches = !debitInvalid && balanceBefore - balanceAfter === BigInt(amountRaw);
 		}
 	} catch {
 		balanceSufficient = false;
@@ -677,6 +742,7 @@ export async function runPaymentVerification(
 		: payToMatches &&
 			signatureValid &&
 			balanceSufficient &&
+			debitMatches &&
 			workValid &&
 			frontierMatches &&
 			confirmedFrontierMatches;
@@ -687,6 +753,11 @@ export async function runPaymentVerification(
 					!payToMatches ? 'payTo does not match the block link' : '',
 					!signatureValid ? 'block signature is invalid' : '',
 					!balanceSufficient ? 'payer balance is insufficient' : '',
+					!debitMatches
+						? debitInvalid
+							? 'block balance exceeds the payer balance (invalid debit)'
+							: 'block does not debit the required amount'
+						: '',
 					!workValid ? 'block proof of work is invalid' : '',
 					!frontierMatches ? 'block previous does not match the payer frontier' : '',
 					!confirmedFrontierMatches ? 'payer frontier is not confirmed' : '',
@@ -704,6 +775,8 @@ export async function runPaymentVerification(
 			payToMatches,
 			signatureValid,
 			balanceSufficient,
+			debitMatches,
+			debitInvalid,
 			workValid,
 			frontierMatches,
 			confirmedFrontierMatches,
@@ -714,9 +787,9 @@ export async function runPaymentVerification(
 }
 
 async function handleVerifyPayment(context: IExecuteFunctions, i: number): Promise<IDataObject> {
-	const signatureValue = context.getNodeParameter('paymentSignature', i) as string;
-	const payTo = context.getNodeParameter('payTo', i) as string;
-	const amountNano = context.getNodeParameter('amount', i) as string;
+	const signatureValue = String(context.getNodeParameter('paymentSignature', i));
+	const payTo = String(context.getNodeParameter('payTo', i));
+	const amountNano = String(context.getNodeParameter('amount', i));
 	const mode = context.getNodeParameter('verificationMode', i, 'facilitator') as string;
 
 	return runPaymentVerification(context, {
@@ -746,35 +819,35 @@ export async function detectOnChainReplay(
 	amountRaw: string,
 	payTo: string,
 ): Promise<{ replayed: boolean; matched: boolean }> {
-	try {
-		const computedHash = computeStateBlockHash(block);
-		if (!computedHash) return { replayed: false, matched: false };
-		const nanoCredentials = await context.getCredentials('x402NanoApi');
-		const nanoConfig = getNanoRpcConfig(nanoCredentials);
-		const blockInfo = await getBlockInfo(context, nanoConfig, computedHash.toString('hex'));
-		if (!blockInfo) return { replayed: false, matched: false };
+	const computedHash = computeStateBlockHash(block);
+	if (!computedHash) return { replayed: false, matched: false };
+	const nanoCredentials = await requireCredentials(context, 'x402NanoApi', 'replay detection');
+	const nanoConfig = getNanoRpcConfig(nanoCredentials);
+	const blockInfo = await getBlockInfo(context, nanoConfig, computedHash.toString('hex'));
+	// A block that is not on the ledger is not a replay (yet) — the payment may
+	// simply not have been broadcast. Infra failures (missing credential,
+	// unreachable RPC, other RPC errors) propagate as errors: silently treating
+	// them as "not replayed" would re-answer 402 and double-charge retries.
+	if (!blockInfo) return { replayed: false, matched: false };
 
-		const replayPayerMatches = blockInfo.account === block.account;
-		const replayAmountMatches = blockInfo.amount === amountRaw;
-		const replaySubtypeMatches = blockInfo.subtype === 'send';
-		const replayLinkMatches =
-			Boolean(blockInfo.linkAsAccount && blockInfo.linkAsAccount === payTo) ||
-			Boolean(
-				blockInfo.link &&
-					blockInfo.link.toLowerCase() === (decodePayToHex(payTo) ?? '').toLowerCase(),
-			);
+	const replayPayerMatches = blockInfo.account === block.account;
+	const replayAmountMatches = blockInfo.amount === amountRaw;
+	const replaySubtypeMatches = blockInfo.subtype === 'send';
+	const replayLinkMatches =
+		Boolean(blockInfo.linkAsAccount && blockInfo.linkAsAccount === payTo) ||
+		Boolean(
+			blockInfo.link &&
+				blockInfo.link.toLowerCase() === (decodePayToHex(payTo) ?? '').toLowerCase(),
+		);
 
-		return {
-			replayed: true,
-			matched:
-				replayPayerMatches &&
-				replayAmountMatches &&
-				replaySubtypeMatches &&
-				replayLinkMatches,
-		};
-	} catch {
-		return { replayed: false, matched: false };
-	}
+	return {
+		replayed: true,
+		matched:
+			replayPayerMatches &&
+			replayAmountMatches &&
+			replaySubtypeMatches &&
+			replayLinkMatches,
+	};
 }
 
 export interface SettlePaymentInput {
@@ -822,7 +895,7 @@ export async function runPaymentSettlement(
 	};
 
 	if (mode === 'facilitator') {
-		const credentials = await context.getCredentials('x402FacilitatorApi');
+		const credentials = await requireCredentials(context, 'x402FacilitatorApi', 'settling payments');
 		const config = getFacilitatorConfig(credentials);
 		const result = await facilitatorSettle(
 			context,
@@ -838,7 +911,7 @@ export async function runPaymentSettlement(
 		} as IDataObject;
 	}
 
-	const nanoCredentials = await context.getCredentials('x402NanoApi');
+	const nanoCredentials = await requireCredentials(context, 'x402NanoApi', 'settling payments locally');
 	const nanoConfig = getNanoRpcConfig(nanoCredentials);
 	const transaction = await processBlock(context, nanoConfig, block as unknown as Record<string, unknown>);
 
@@ -854,9 +927,9 @@ export async function runPaymentSettlement(
 }
 
 async function handleSettlePayment(context: IExecuteFunctions, i: number): Promise<IDataObject> {
-	const signatureValue = context.getNodeParameter('paymentSignature', i) as string;
-	const payTo = context.getNodeParameter('payTo', i) as string;
-	const amountNano = context.getNodeParameter('amount', i) as string;
+	const signatureValue = String(context.getNodeParameter('paymentSignature', i));
+	const payTo = String(context.getNodeParameter('payTo', i));
+	const amountNano = String(context.getNodeParameter('amount', i));
 	const mode = context.getNodeParameter('settleMode', i, 'facilitator') as string;
 
 	return runPaymentSettlement(context, {
@@ -868,7 +941,7 @@ async function handleSettlePayment(context: IExecuteFunctions, i: number): Promi
 }
 
 async function handleReceivePending(context: IExecuteFunctions, i: number): Promise<IDataObject> {
-	const credentials = await context.getCredentials('x402NanoApi');
+	const credentials = await requireCredentials(context, 'x402NanoApi', 'receiving pending sends');
 	const config = getNanoRpcConfig(credentials);
 	const privateKeyHex = ((credentials.privateKey as string) ?? '').trim();
 	const walletId = ((credentials.walletId as string) ?? '').trim();
@@ -972,7 +1045,7 @@ async function handleReceivePending(context: IExecuteFunctions, i: number): Prom
 }
 
 async function handleSupported(context: IExecuteFunctions): Promise<IDataObject> {
-	const credentials = await context.getCredentials('x402FacilitatorApi');
+	const credentials = await requireCredentials(context, 'x402FacilitatorApi', 'listing supported kinds');
 	const config = getFacilitatorConfig(credentials);
 	const result = await facilitatorGetSupported(context, config);
 	return { ...(result as IDataObject), facilitatorUrl: config.baseUrl };
@@ -980,8 +1053,8 @@ async function handleSupported(context: IExecuteFunctions): Promise<IDataObject>
 
 async function handleBuild402Response(context: IExecuteFunctions, i: number): Promise<IDataObject> {
 	const protocol = context.getNodeParameter('protocol', i, 'both') as string;
-	const payTo = context.getNodeParameter('payTo', i) as string;
-	const amountNano = context.getNodeParameter('amount', i) as string;
+	const payTo = String(context.getNodeParameter('payTo', i));
+	const amountNano = String(context.getNodeParameter('amount', i));
 	const paymentId = context.getNodeParameter('paymentId', i, '') as string;
 	const serviceName = context.getNodeParameter('serviceName', i, '') as string;
 	const resourceDescription = context.getNodeParameter('resourceDescription', i, '') as string;

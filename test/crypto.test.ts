@@ -7,7 +7,15 @@ import {
 	verifyEd25519Blake2b,
 } from '../utils/ed25519-blake2b';
 import { decodeNanoAddress, encodeNanoAddress } from '../utils/nano-address';
-import { buildSendBlock, buildReceiveBlock, signBlock, verifyBlock, OPEN_BLOCK_PREVIOUS, resolveReceiveWorkRoot } from '../utils/block';
+import {
+	buildSendBlock,
+	buildReceiveBlock,
+	signBlock,
+	verifyBlock,
+	computeStateBlockHash,
+	OPEN_BLOCK_PREVIOUS,
+	resolveReceiveWorkRoot,
+} from '../utils/block';
 import type { NanoStateBlock } from '../utils/block';
 
 // Real mainnet fixtures (fetched from a public Nano RPC node).
@@ -60,6 +68,12 @@ describe('ed25519-blake2b', () => {
 		expect(verifyEd25519Blake2b(signature, message, publicKey)).toBe(true);
 	});
 
+	it('computes the block hash of the real mainnet block correctly', () => {
+		const hash = computeStateBlockHash(REGULAR_BLOCK);
+		expect(hash).not.toBeNull();
+		expect(hash!.toString('hex').toUpperCase()).toBe(REGULAR_BLOCK_HASH);
+	});
+
 	it('derives the public key and signs/verifies roundtrip', () => {
 		const publicKey = derivePublicKey(TEST_PRIVATE_KEY);
 		expect(publicKey).toHaveLength(32);
@@ -93,6 +107,21 @@ describe('nano addresses', () => {
 		expect(address!.startsWith('nano_')).toBe(true);
 		const decoded = decodeNanoAddress(address!);
 		expect(decoded!.equals(publicKey)).toBe(true);
+	});
+
+	it('round-trips and decodes legacy xrb_ addresses', () => {
+		const publicKey = Buffer.from(BURN_ACCOUNT_PUBLIC_HEX, 'hex');
+		const xrb = encodeNanoAddress(publicKey, 'xrb') as string;
+		expect(xrb.startsWith('xrb_')).toBe(true);
+
+		const knownLegacy = 'xrb_1111111111111111111111111111111111111111111111111111hifc8npp';
+		const decodedZero = decodeNanoAddress(knownLegacy);
+		expect(decodedZero).not.toBeNull();
+		expect(decodedZero!.every((byte) => byte === 0)).toBe(true);
+
+		const decoded = decodeNanoAddress(xrb);
+		expect(decoded).not.toBeNull();
+		expect(decoded!.toString('hex')).toBe(BURN_ACCOUNT_PUBLIC_HEX);
 	});
 
 	it('rejects corrupted checksums', () => {

@@ -4,6 +4,30 @@
  */
 
 import NanoConverter from './nano-converter';
+import { X402PaymentError } from './errors';
+
+/**
+ * Canonicalize a wire amount into a raw-unit decimal string. Accepts either a
+ * digits-only string or a non-negative safe integer. Rejects floats, negative
+ * values, numbers beyond 2^53-1 and non-numeric input — raw amounts larger
+ * than Number.MAX_SAFE_INTEGER would otherwise be silently rounded.
+ */
+export function toAmountRaw(value: unknown): string {
+	if (typeof value === 'number') {
+		if (!Number.isSafeInteger(value) || value < 0) {
+			throw new X402PaymentError(
+				`Invalid raw amount "${value}": raw amounts must be a non-negative integer within the safe integer range`,
+			);
+		}
+		return BigInt(value).toString();
+	}
+	if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
+		return value.trim();
+	}
+	throw new X402PaymentError(
+		`Invalid raw amount "${String(value)}": expected an unsigned decimal integer string`,
+	);
+}
 
 export function isValidNanoAmount(amount: string): boolean {
 	if (typeof amount !== 'string') {

@@ -44,3 +44,29 @@ export function normalizeRequestHeaders(
 
 	return { headers: {} };
 }
+
+/**
+ * Coerce a JSON body parameter into its object form. n8n `json`-typed
+ * parameters pass expression results through as-is, so the value may arrive
+ * as a parsed object OR as a JSON text string (e.g. typed literally or
+ * produced by an expression). String bodies must never reach the HTTP layer
+ * with `json: true` — that corrupts the content type and the payload.
+ * Returns { value: parsed object } (undefined for empty input) or
+ * { error } for invalid JSON text.
+ */
+export function coerceJsonBody(
+	input: unknown,
+): { value: unknown; error?: HeaderInputError } {
+	if (typeof input !== 'string') {
+		return { value: input };
+	}
+	const trimmed = input.trim();
+	if (trimmed.length === 0) {
+		return { value: undefined };
+	}
+	try {
+		return { value: JSON.parse(trimmed) };
+	} catch {
+		return { value: undefined, error: { kind: 'invalid', message: 'The JSON body must be a valid JSON string or a JSON object' } };
+	}
+}

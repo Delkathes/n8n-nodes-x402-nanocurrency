@@ -56,7 +56,7 @@ export function decodeNanoAddress(address: string): Buffer | null {
 		return null;
 	}
 
-	const payload = address.slice(5); // strip "nano_"/"xrb_" prefix
+	const payload = address.slice(address.startsWith('xrb_') ? 4 : 5); // strip "nano_"(5) / "xrb_"(4)
 	const keyChars = payload.slice(0, 52);
 	const checksumChars = payload.slice(52, 60);
 

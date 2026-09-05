@@ -5,10 +5,14 @@ import {
 	type INodeExecutionData,
 } from 'n8n-workflow';
 
-import { computeStateBlockHash } from '../../../utils/block';
+import { computeStateBlockHash, verifyBlock } from '../../../utils/block';
 import { isValidNanoAmount, nanoToRaw } from '../../../utils/conversions';
 import { classifyPaywallRequest, normalizeHeaderKeys } from '../../../utils/paywall-classifier';
-import { extractBlockFromPayload, parsePaymentHeader } from '../../../utils/x402-codec';
+import {
+	extractBlockFromPayload,
+	extractPaymentIdFromPayload,
+	parsePaymentHeader,
+} from '../../../utils/x402-codec';
 import {
 	buildPaymentResponseEnvelope,
 	buildPaymentRequiredResponse,
@@ -56,8 +60,8 @@ export async function executePaywall(context: IExecuteFunctions): Promise<INodeE
 			return { ...raw, headers: normalizeHeaderKeys(raw.headers), payment };
 		};
 
-		const amountNano = context.getNodeParameter('amount', i) as string;
-		const payTo = context.getNodeParameter('payTo', i) as string;
+		const amountNano = String(context.getNodeParameter('amount', i));
+		const payTo = String(context.getNodeParameter('payTo', i));
 		if (!isValidNanoAmount(amountNano)) {
 			throw new NodeOperationError(
 				context.getNode(),
@@ -108,6 +112,18 @@ export async function executePaywall(context: IExecuteFunctions): Promise<INodeE
 			continue;
 		}
 
+		// Bind the payment to this request when the merchant advertises a
+		// per-request paymentId: a payment made for a different paymentId is not
+		// a retry of THIS request (it may already be settled for another one),
+		// so it must not unlock this request — answer a fresh 402.
+		if (paymentId) {
+			const payloadPaymentId = extractPaymentIdFromPayload(parsed.payload);
+			if (payloadPaymentId !== paymentId) {
+				pushRequired();
+				continue;
+			}
+		}
+
 		// 2. Verify.
 		const verificationMode = context.getNodeParameter('verificationMode', i, 'facilitator') as string;
 		let verified: IDataObject;
@@ -126,9 +142,47 @@ export async function executePaywall(context: IExecuteFunctions): Promise<INodeE
 		}
 
 		if (verified.isValid !== true) {
-			// 3. Invalid locally: is it a retry of an already-settled payment?
-			const replay = await detectOnChainReplay(context, block, amountRaw, payTo);
+			// A forged/random block cannot be a retry of a settled payment:
+			// answer 402 immediately (no RPC involved) so crafted garbage does
+			// not turn into workflow errors.
+			if (!verifyBlock(block)) {
+				pushRequired();
+				continue;
+			}
+
+			// 3. Genuine signature, not valid locally: is it a retry of an
+			// already-settled payment? Infra failures (no x402NanoApi
+			// credential / unreachable RPC) surface as an error — never as a
+			// fresh 402, which would make the client pay twice.
+			let replay: { replayed: boolean; matched: boolean };
+			try {
+				replay = await detectOnChainReplay(context, block, amountRaw, payTo);
+			} catch (error) {
+				throw new NodeOperationError(
+					context.getNode(),
+					`Replay detection failed: ${error instanceof Error ? error.message : String(error)}`,
+					{
+						itemIndex: i,
+						description:
+							'Assign a reachable X402 Nano API credential so already-settled retries can be answered idempotently instead of being re-charged.',
+					},
+				);
+			}
 			if (replay.replayed && replay.matched) {
+				if (!autoSettle) {
+					pushReceived({
+						statusCode: 200,
+						headers: {},
+						body: {},
+						settled: false,
+						verified: true,
+						replayed: true,
+						payTo,
+						amountNano,
+						amountRaw,
+					});
+					continue;
+				}
 				const hash = computeStateBlockHash(block);
 				pushReceived({
 					...(buildPaymentResponseEnvelope({

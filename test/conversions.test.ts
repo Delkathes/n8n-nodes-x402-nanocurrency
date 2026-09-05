@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isValidNanoAmount, nanoToRaw, rawToNano } from '../utils/conversions';
+import { isValidNanoAmount, nanoToRaw, rawToNano, toAmountRaw } from '../utils/conversions';
 
 describe('nano conversions', () => {
 	it('converts 30-decimal NANO amounts to raw without floating point loss', () => {
@@ -28,5 +28,34 @@ describe('nano conversions', () => {
 		expect(isValidNanoAmount('0.000000000000000000000000000001')).toBe(true);
 		expect(isValidNanoAmount('0')).toBe(false);
 		expect(isValidNanoAmount('1e-7')).toBe(false);
+	});
+});
+
+describe('toAmountRaw', () => {
+	it('passes digit strings through', () => {
+		expect(toAmountRaw('100000000000000000000000000000')).toBe(
+			'100000000000000000000000000000',
+		);
+		expect(toAmountRaw('  42  ')).toBe('42');
+	});
+
+	it('accepts non-negative safe integers', () => {
+		expect(toAmountRaw(42)).toBe('42');
+		expect(toAmountRaw(0)).toBe('0');
+		expect(toAmountRaw(Number.MAX_SAFE_INTEGER)).toBe(String(Number.MAX_SAFE_INTEGER));
+	});
+
+	it('rejects floats, negatives and unsafe integers without silent rounding', () => {
+		expect(() => toAmountRaw(1.5)).toThrow();
+		expect(() => toAmountRaw(-1)).toThrow();
+		expect(() => toAmountRaw(Number.MAX_SAFE_INTEGER + 1)).toThrow();
+		expect(() => toAmountRaw(1e30)).toThrow();
+	});
+
+	it('rejects non-numeric input', () => {
+		expect(() => toAmountRaw('12.5')).toThrow();
+		expect(() => toAmountRaw('1e30')).toThrow();
+		expect(() => toAmountRaw('abc')).toThrow();
+		expect(() => toAmountRaw(undefined)).toThrow();
 	});
 });

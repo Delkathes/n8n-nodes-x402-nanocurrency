@@ -36,7 +36,7 @@ export class X402NanoPaywall implements INodeType {
 		properties: [
 			{
 				displayName:
-					'Place this node after a Webhook node (required by the Respond to Webhook node). Unpaid requests leave on "Payment required" with a ready 402 envelope; paid requests are verified, settled and leave on "Payment received" with a ready 200 envelope. Answer via a Respond to Webhook node bound to {{ $json.statusCode }}, {{ $json.headers }} and {{ $json.body }}.',
+					'Place this node after a Webhook node (required by the Respond to Webhook node). Unpaid requests leave on "Payment required" with a ready 402 envelope; paid requests are verified, settled and leave on "Payment received" with a ready 200 envelope. Answer via a Respond to Webhook node bound to {{ $json.statusCode }}, {{ $json.headers }} and {{ $json.body }}. Retry of an already-settled payment is answered idempotently on "Payment received" — requires a reachable Nano RPC (x402NanoApi credential); without one, such retries surface as errors instead of double-charging.',
 				name: 'paywallNotice',
 				type: 'notice',
 				default: '',
@@ -147,12 +147,12 @@ export class X402NanoPaywall implements INodeType {
 						value: 'facilitator',
 						description: 'Verify through the x402 facilitator',
 					},
-					{
-						name: 'Local (Nano RPC)',
-						value: 'local',
-						description:
-							'Verify locally against your Nano node. Already-on-chain retries are detected and answered idempotently in both modes.',
-					},
+{
+					name: 'Local (Nano RPC)',
+					value: 'local',
+					description:
+						'Verify locally against your Nano node. Already-on-chain retries are detected and answered idempotently when a reachable Nano RPC (x402NanoApi credential) is configured.',
+				},
 				],
 				description: 'How to verify the incoming payment signature',
 			},

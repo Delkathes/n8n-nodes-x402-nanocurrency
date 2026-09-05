@@ -8,6 +8,7 @@ import {
 	encodePaymentHeader,
 	encodeSettlementHeader,
 	extractBlockFromPayload,
+	extractPaymentIdFromPayload,
 	findExactNanoAccept,
 	HEADER_V1_PAYMENT,
 	HEADER_V1_PAYMENT_RESPONSE,
@@ -71,6 +72,24 @@ describe('v1 requirements (body)', () => {
 	it('normalizes maxAmountRequired to amountRaw', () => {
 		const normalized = normalizeAcceptV1(body.accepts[0]);
 		expect(normalized.amountRaw).toBe(AMOUNT_RAW);
+	});
+
+	it('canonicalizes numeric amounts without floating point rounding', () => {
+		const numeric = normalizeAcceptV1({
+			scheme: 'exact',
+			network: 'nano:mainnet',
+			maxAmountRequired: 42,
+			payTo: BURN_ACCOUNT,
+		});
+		expect(numeric.amountRaw).toBe('42');
+		expect(() =>
+			normalizeAcceptV1({
+				scheme: 'exact',
+				network: 'nano:mainnet',
+				maxAmountRequired: 1e30,
+				payTo: BURN_ACCOUNT,
+			}),
+		).toThrow();
 	});
 });
 
@@ -201,6 +220,48 @@ describe('payment payloads', () => {
 	it('rejects garbage header values', () => {
 		expect(parsePaymentHeader('not-a-header')).toBeNull();
 		expect(parsePaymentHeader(Buffer.from('{"nope": true}').toString('base64'))).toBeNull();
+	});
+});
+
+describe('extractPaymentIdFromPayload', () => {
+	it('reads the paymentId from a v1 payload', () => {
+		const payload = buildPaymentPayloadV1(SAMPLE_BLOCK, 'quote-123');
+		expect(extractPaymentIdFromPayload(payload)).toBe('quote-123');
+	});
+
+	it('reads the paymentId from a v2 accepted echo (top-level and extra)', () => {
+		const topLevel = buildPaymentPayloadV2(SAMPLE_BLOCK, {
+			scheme: 'exact',
+			network: 'nano:mainnet',
+			amount: AMOUNT_RAW,
+			payTo: BURN_ACCOUNT,
+			paymentId: 'quote-456',
+		});
+		expect(extractPaymentIdFromPayload(topLevel)).toBe('quote-456');
+
+		const inExtra = buildPaymentPayloadV2(SAMPLE_BLOCK, {
+			scheme: 'exact',
+			network: 'nano:mainnet',
+			amount: AMOUNT_RAW,
+			payTo: BURN_ACCOUNT,
+			extra: { paymentId: 'quote-789' },
+		});
+		expect(extractPaymentIdFromPayload(inExtra)).toBe('quote-789');
+	});
+
+	it('returns undefined when no paymentId is present', () => {
+		expect(extractPaymentIdFromPayload(buildPaymentPayloadV1(SAMPLE_BLOCK))).toBeUndefined();
+		expect(
+			extractPaymentIdFromPayload(
+				buildPaymentPayloadV2(SAMPLE_BLOCK, {
+					scheme: 'exact',
+					network: 'nano:mainnet',
+					amount: AMOUNT_RAW,
+					payTo: BURN_ACCOUNT,
+					extra: {},
+				}),
+			),
+		).toBeUndefined();
 	});
 });
 

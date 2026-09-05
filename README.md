@@ -12,7 +12,7 @@ An n8n community node package for the **x402 payment protocol** with **Nano (XNO
 | Request | Send with Payment Header | Send a request with an existing `X-PAYMENT`/`PAYMENT-SIGNATURE` header (from Build Payment Signature) and return the paid response |
 | Request | Probe | Send a request without paying and get the payment requirements (price, payTo, resource) |
 | Payment | Build Payment Signature | Create an `X-PAYMENT` (v1) or `PAYMENT-SIGNATURE` (v2) header from a payTo address + amount |
-| Payment | Verify Payment | Verify a payment payload against the expected requirements (facilitator or local Nano RPC). Local mode checks signature, payTo, proof of work, payer frontier + confirmation and replay; replayed payments matching the requirements are valid (idempotent), so client retries never double-charge. Best-effort — settlement remains the authoritative gate |
+| Payment | Verify Payment | Verify a payment payload against the expected requirements (facilitator or local Nano RPC). Local mode checks signature, payTo, the exact debited amount, proof of work, payer frontier + confirmation and replay; replayed payments matching the requirements are valid (idempotent), so client retries never double-charge. Best-effort — settlement remains the authoritative gate |
 | Payment | Settle Payment | Settle a verified payment block and get the transaction hash (facilitator or local Nano RPC) |
 | Payment | Receive Pending | Receive all confirmed pending sends on the configured account by broadcasting open/receive blocks (use after local settlement to move funds out of the pending state) |
 | Payment | Get Supported | List the facilitator's supported payment kinds |
@@ -20,12 +20,55 @@ An n8n community node package for the **x402 payment protocol** with **Nano (XNO
 | Response | Build 402 Payment Required | Build the 402 headers + body for a paywall webhook (v1, v2 or both, optional maxTimeoutSeconds) |
 | Response | Build Payment Response | Build the settlement response headers for a paid request |
 
-### `X402 Nano Classify` node (resource server — seller)
+### `X402 Nano Paywall` node (resource server — seller, recommended)
 
-Turns any workflow into a paid endpoint. Place it **after a built-in Webhook
-node** (the Respond to Webhook node only works with the built-in Webhook /
-Form / Chat triggers) and it classifies every request into two labeled
-outputs:
+The drop-in way to turn a workflow into a paid endpoint: classify, verify and
+settle in one pass. Place it **after a built-in Webhook node** (the Respond to
+Webhook node only works with the built-in Webhook / Form / Chat triggers) and
+answer its two labeled outputs with Respond to Webhook nodes:
+
+- **`Payment required`** — the request carried no usable payment header, or
+  the payment failed verification. The item is a ready 402 envelope
+  (`statusCode`, `headers` with `PAYMENT-REQUIRED`, `body` with the v1/v2
+  requirements) — respond `{{ $json.statusCode }}` / `{{ $json.headers }}` /
+  `{{ $json.body }}`.
+- **`Payment received`** — the payment verified. By default it is also
+  **settled automatically** and the item is a ready 200 envelope
+  (`statusCode`, `headers` with `PAYMENT-RESPONSE` / `X-PAYMENT-RESPONSE`,
+  `body`). With **Settle Automatically** off, the item carries the verified,
+  *unsettled* payment (`settled: false`, `verified: true`, `payTo`,
+  `amountNano`, `amountRaw`) so you can settle it later with Settle Payment.
+
+Already-settled retries are answered idempotently on `Payment received`
+(`replayed: true`, with the settlement headers, no second settle): the node
+detects the send on-chain (payer, amount, payTo, `subtype: send`) even when
+local verification rejects it. Replay detection requires a reachable Nano RPC
+(`x402NanoApi` credential); without one, such retries surface as errors
+instead of double-charging. When a `paymentId` is configured, the payment
+header's paymentId must match the request's — a payment made for a different
+request cannot unlock this one. Note the trade-off: without a per-request
+`paymentId`, a settled payment can be replayed by its payer for the same-priced
+resource. A failed **settlement** raises a node error — never a 402 — so the
+client retries the same signature instead of paying twice.
+
+```
+Webhook → X402 Nano Paywall (request with or without payment)
+├─ Payment required → Respond 402 + PAYMENT-REQUIRED
+└─ Payment received → Respond 200 + PAYMENT-RESPONSE
+```
+
+Configure `payTo`, `amount` (NANO) and optional `paymentId`, service/resource
+metadata, `protocol` (v1 / v2 / both, dual-mode by default),
+`verificationMode` and `settleMode` (facilitator or local Nano RPC — both
+credentials are optional). `amount` can be an expression for dynamic pricing.
+
+### `X402 Nano Classify` node (resource server — seller, building block)
+
+Low-level alternative to `X402 Nano Paywall` when you want to interleave your
+own verify/settle logic between classification and responding. Place it
+**after a built-in Webhook node** (the Respond to Webhook node only works with
+the built-in Webhook / Form / Chat triggers) and it classifies every request
+into two labeled outputs:
 
 - **`Unpaid request`** — no v1/v2 payment header (probe requests; GET
   doubles as a browser probe and lands here → answer 402)
@@ -50,6 +93,9 @@ Webhook → X402 Nano Classify (request with or without payment)
                     → your business nodes (NanoGPT, ...)
                     → Build Payment Response → Respond 200 + PAYMENT-RESPONSE
 ```
+
+> Unless you need to run your own business nodes between verification and
+> responding, prefer the one-node `X402 Nano Paywall` flow above.
 
 ## Protocol versions
 

@@ -15,7 +15,12 @@ export interface NanoRpcConfig {
 }
 
 export function getNanoRpcConfig(credentials: ICredentialDataDecryptedObject): NanoRpcConfig {
-	const rpcUrl = (credentials.rpcUrl as string)?.trim() || 'http://localhost:7076';
+	const rpcUrl = typeof credentials.rpcUrl === 'string' ? credentials.rpcUrl.trim() : '';
+	if (!rpcUrl) {
+		throw new X402PaymentError(
+			'The X402 Nano API credential has no RPC URL configured. Set the "RPC URL" field (e.g. https://rpc.nano.to) on the credential.',
+		);
+	}
 	return {
 		rpcUrl,
 		timeoutMs: 15000,
@@ -180,7 +185,12 @@ export async function getBlockInfo(
 		},
 	);
 	if (response?.error) {
-		return null;
+		const message = String(response.error);
+		if (/not found|unknown/i.test(message)) {
+			// The block is not on this node's ledger: not a replay (yet).
+			return null;
+		}
+		throw new X402PaymentError(`Nano RPC error (block_info): ${message}`);
 	}
 
 	const data = response as Record<string, unknown>;
