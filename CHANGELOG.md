@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.1](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.5.0...0.5.1) (2026-09-05)
+
+### Bug Fixes
+
+* harden paywall money-safety and wire-amount handling ([7aff975](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/commit/7aff975d58f13d5afa063214782f24e6e6973ca9))
+
 # [0.5.0](https://github.com/Delkathes/n8n-nodes-x402-nanocurrency/compare/0.4.2...0.5.0) (2026-09-03)
 
 ### Features
